@@ -187,20 +187,53 @@ textarea.inp{resize:vertical;min-height:68px}
 .sbtn:hover{background:var(--accent);color:var(--primary)}
 
 /* ═══ SCORER SCOREBOARD ═══ */
-.scoreboard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
-.scoreboard-header{background:var(--surface2);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
-.scoreboard-body{display:grid;grid-template-columns:1fr 80px 1fr;min-height:260px}
-.score-side{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 14px;cursor:pointer;transition:background .15s;user-select:none;position:relative}
-.score-side:hover{background:rgba(255,255,255,.03)}
-.score-side:active{background:rgba(240,192,64,.06)}
-.score-side .tap-hint{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-.score-side .player-name{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--text);text-align:center;margin-bottom:10px;line-height:1.1}
-.score-side .big-score{font-family:'Barlow Condensed',sans-serif;font-size:120px;font-weight:900;color:var(--accent);line-height:1;transition:transform .1s}
-.score-side:active .big-score{transform:scale(.96)}
-.score-side .score-btns-row{display:flex;gap:8px;margin-top:14px}
-.score-divider{display:flex;align-items:center;justify-content:center;background:var(--surface3);border-left:1px solid var(--border);border-right:1px solid var(--border)}
-.score-vs-text{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--text3);letter-spacing:.05em}
-.scoreboard-footer{border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center}
+.scoreboard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:16px;transition:all .3s}
+.scoreboard.fs-mode{position:fixed;inset:0;z-index:5000;border-radius:0;margin:0;display:flex;flex-direction:column}
+.scoreboard-header{background:var(--surface2);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0}
+.scoreboard-body{display:grid;grid-template-columns:1fr 72px 1fr;flex:1;min-height:260px}
+.scoreboard.fs-mode .scoreboard-body{min-height:0}
+
+/* Left side — Amber/Gold team */
+.score-side{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 14px;cursor:pointer;transition:background .12s;user-select:none;position:relative}
+.score-side.left{background:rgba(240,192,64,.08);border-right:1px solid rgba(240,192,64,.15)}
+.score-side.left:hover{background:rgba(240,192,64,.14)}
+.score-side.left:active{background:rgba(240,192,64,.2)}
+.score-side.left .big-score{color:#f0c040;text-shadow:0 0 40px rgba(240,192,64,.35)}
+.score-side.left .player-name{color:#f5d070}
+
+/* Right side — Teal/Blue team */
+.score-side.right{background:rgba(61,214,140,.08);border-left:1px solid rgba(61,214,140,.15)}
+.score-side.right:hover{background:rgba(61,214,140,.14)}
+.score-side.right:active{background:rgba(61,214,140,.2)}
+.score-side.right .big-score{color:#3dd68c;text-shadow:0 0 40px rgba(61,214,140,.3)}
+.score-side.right .player-name{color:#6ee8b0}
+
+.score-side .tap-hint{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
+.score-side .player-name{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;text-align:center;margin-bottom:12px;line-height:1.1;max-width:260px;word-break:break-word}
+.score-side .big-score{font-family:'Barlow Condensed',sans-serif;font-size:140px;font-weight:900;line-height:1;transition:transform .08s}
+.scoreboard.fs-mode .big-score{font-size:220px}
+.score-side:active .big-score{transform:scale(.94)}
+.score-side .score-btns-row{display:flex;gap:8px;margin-top:16px}
+
+/* Score +/- buttons colored per side */
+.score-side.left .sbtn:hover{background:var(--accent);color:var(--primary)}
+.score-side.right .sbtn:hover{background:var(--accent2);color:var(--primary)}
+
+.score-divider{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--surface2);border-left:1px solid var(--border);border-right:1px solid var(--border);gap:6px;flex-shrink:0}
+.score-vs-text{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:var(--text3);letter-spacing:.05em}
+.score-set-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.scoreboard-footer{border-top:1px solid var(--border);padding:11px 16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center;flex-shrink:0}
+.scoreboard.fs-mode .scoreboard-footer{padding:14px 20px;background:var(--surface2)}
+
+/* Fullscreen button */
+.fs-btn{background:none;border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;transition:all .2s}
+.fs-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Leading indicator */
+.leading-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 8px;border-radius:20px;margin-top:4px}
+.leading-badge.amber{background:rgba(240,192,64,.2);color:var(--accent)}
+.leading-badge.teal{background:rgba(61,214,140,.2);color:var(--accent2)}
+.leading-badge.tie{background:var(--surface3);color:var(--text3)}
 
 /* STANDINGS */
 .stbl{width:100%;border-collapse:collapse;font-size:12px}
@@ -274,6 +307,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
   .score-divider{display:none}
   .main{padding:12px}.nav{gap:5px}.nav-tab{font-size:10px;padding:4px 7px}
   .score-side .big-score{font-size:80px}
+  .scoreboard.fs-mode .big-score{font-size:120px}
 }
 </style>
 </head>
@@ -301,6 +335,7 @@ const S={
   selectedLvl:null,selectedBr:null,
   scoreModal:null,crossScoreModal:null,
   scorerCourtId:null,   // which court scorer is entering for
+  scorerFullscreen:false,
   userModal:null,endModal:false,
   dragSrc:null,
   history:[],historyLoaded:false,
@@ -333,7 +368,7 @@ async function syncSetup(){if(!S.tournament)return;const t=S.tournament;await sh
 async function syncMatchScore(match,levelName,bracketLabel,isXover){if(!S.tournament||!S.sheetsUrl.trim())return;const t=S.tournament;const winner=match.score1>match.score2?match.team1||match.t1:match.team2||match.t2;await sheetsPost('saveMatchScore',{tournamentName:t.name,levelName:levelName||'',bracketLabel:bracketLabel||'',round:match.round||'',team1:match.team1||match.t1,team2:match.team2||match.t2,score1:match.score1,score2:match.score2,winner,stage:isXover?bracketLabel:'Round Robin',timestamp:new Date().toISOString()});}
 async function syncStandings(){if(!S.tournament)return;refreshStandings();const t=S.tournament;await sheetsPost('saveFinalStandings',{tournamentName:t.name,levels:t.levels.map(l=>({name:l.name,brackets:l.brackets.map(b=>({label:b.label,standings:b.standings.map(s=>({pair:s.pair,W:s.W,L:s.L,PF:s.PF,PA:s.PA,pts:s.pts}))}))}))}); }
 async function syncCrossover(){if(!S.tournament||!S.tournament.crossover)return;const t=S.tournament;await sheetsPost('saveCrossoverResult',{tournamentName:t.name,stages:t.crossover.stages.map(st=>({name:st.name,matches:st.matches.map(m=>({t1:m.t1,t2:m.t2,score1:m.score1,score2:m.score2,winner:m.winner,status:m.status}))}))});}
-async function syncEndTournament(){const t=S.tournament;if(!t)return;let champion='',runnerUp='';if(t.crossover){const f=t.crossover.stages.find(s=>s.name==='Final');if(f&&f.matches[0]){const fm=f.matches[0];if(fm.winner)champion=fmtPair(fm.winner.pair);const loser=fm.winner&&fm.t1&&fm.t2?(JSON.stringify(fm.winner.pair)===JSON.stringify(fm.t1.pair)?fm.t2:fm.t1):null;if(loser)runnerUp=fmtPair(loser.pair);}}const totalPlayers=t.levels.reduce((a,l)=>a+l.players.length,0);const totalMatches=t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.length,0),0);const res=await sheetsPost('endTournament',{tournamentName:t.name,category:t.category,totalPlayers,champion,runnerUp,totalMatches,createdAt:t.created,endedAt:new Date().toISOString()});if(res.ok){S.history.unshift({id:S.history.length+1,name:t.name,category:t.category,totalPlayers,champion,runnerUp,totalMatches,createdAt:t.created,endedAt:new Date().toISOString()});toast('Saved to Sheets history!','ok');}}
+async function syncEndTournament(){const t=S.tournament;if(!t)return;let champion='',runnerUp='';if(t.crossover){const f=t.crossover.stages.find(s=>s.name==='Final');if(f&&f.matches[0]){const fm=f.matches[0];if(fm.winner)champion=fmtPair(fm.winner.pair);const loser=fm.winner&&fm.t1&&fm.t2?(JSON.stringify(fm.winner.pair)===JSON.stringify(fm.t1.pair)?fm.t2:fm.t1):null;if(loser)runnerUp=fmtPair(loser.pair);}}const totalPlayers=t.levels.reduce((a,l)=>a+l.players.length+(l.highPlayers||[]).length+(l.midPlayers||[]).length,0);const totalMatches=t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.length,0),0);const res=await sheetsPost('endTournament',{tournamentName:t.name,category:t.category,totalPlayers,champion,runnerUp,totalMatches,createdAt:t.created,endedAt:new Date().toISOString()});if(res.ok){S.history.unshift({id:S.history.length+1,name:t.name,category:t.category,totalPlayers,champion,runnerUp,totalMatches,createdAt:t.created,endedAt:new Date().toISOString()});toast('Saved to Sheets history!','ok');}}
 async function loadHistory(){if(!S.sheetsUrl.trim()){S.historyLoaded=true;return;}const res=await sheetsPost('getHistory',{});if(res.ok&&res.history){S.history=res.history.reverse();S.historyLoaded=true;}}
 
 // ═══════════════════════════════════════════════════════════
@@ -406,9 +441,13 @@ function updateLiveScore(courtId,side,delta){
 }
 
 function swapCourtSides(courtId){
-  const c=S.courts.find(x=>x.id===courtId);if(!c)return;
+  const c=S.courts.find(x=>x.id===courtId);if(!c||!c.matchId)return;
+  // Swap scores
   [c.liveScore.s1,c.liveScore.s2]=[c.liveScore.s2,c.liveScore.s1];
-  toast('Sides swapped (Change Court)','ok');render();
+  // Swap the team assignment on the match itself so names follow
+  const m=getBrMatch(c.bracketId,c.matchId);
+  if(m)[m.team1,m.team2]=[m.team2,m.team1];
+  toast('Sides swapped — players and scores exchanged','ok');render();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -532,7 +571,7 @@ function renderHome(){
     <button class="btn btn-y btn-lg" onclick="ST('tournament-setup')">+ Create Tournament</button>
   </div>`;
   refreshStandings();
-  const totalP=t.levels.reduce((a,l)=>a+l.players.length,0);
+  const totalP=t.levels.reduce((a,l)=>a+l.players.length+(l.highPlayers||[]).length+(l.midPlayers||[]).length,0);
   const totalM=t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.length,0),0);
   const doneM=t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.filter(m=>m.status==='finished').length,0),0);
   const xDone=t.crossover&&t.crossover.stages.every(s=>s.matches.every(m=>m.status==='finished'||m.status==='bye'));
@@ -825,77 +864,331 @@ function submitCreate(){
   initCourts(nc);
   render();toast('Tournament created!','ok');
 }
+// ── DRAFT INPUT BUFFERS ──────────────────────────────────
+// Stores unsaved textarea text per level so re-renders don't wipe inputs.
+// Key: lvlId_tier  (tier = 'std' | 'high' | 'mid')
+const DRAFT = {};
+
+function saveDrafts(){
+  // Persist all visible textarea values into DRAFT before any re-render
+  document.querySelectorAll('[data-draft-key]').forEach(el=>{
+    DRAFT[el.dataset.draftKey]=el.value;
+  });
+}
+function getDraft(key){ return DRAFT[key]||''; }
+function clearDraft(key){ DRAFT[key]=''; }
+
+// ── LEVEL RENDERING ──────────────────────────────────────
 function renderLevels(){
   const t=S.tournament;
+  const hasAllBrackets=t.levels.length&&t.levels.every(l=>l.brackets.length);
+  const totalPending=t.levels.reduce((sum,l)=>{
+    const std=(getDraft(`${l.id}_std`)||'').split('\n').filter(s=>s.trim()).length;
+    const high=(getDraft(`${l.id}_high`)||'').split('\n').filter(s=>s.trim()).length;
+    const mid=(getDraft(`${l.id}_mid`)||'').split('\n').filter(s=>s.trim()).length;
+    return sum+std+high+mid;
+  },0);
   return`<div>
     <div class="card" style="margin-bottom:12px">
-      <div class="fbetween" style="margin-bottom:12px">
+      <div class="fbetween" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
         <div style="font-weight:700;font-size:15px">Levels</div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <input class="inp inp-sm" id="new-lvl" placeholder="Level name…" style="width:180px"/>
-          <button class="btn btn-y btn-sm" onclick="addLevelInput()">+ Add</button>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input class="inp inp-sm" id="new-lvl" placeholder="Level name…" style="width:170px"
+            onkeydown="if(event.key==='Enter')addLevelInput()"/>
+          <button class="btn btn-y btn-sm" onclick="addLevelInput()">+ Add Level</button>
+          ${t.levels.length?`<button class="btn btn-g btn-sm" onclick="submitAllPlayers()" title="Add all pending textarea inputs at once">✓ Submit All Players</button>`:''}
         </div>
       </div>
-      ${!t.levels.length?`<div class="empty" style="padding:18px"><div class="empty-i">📊</div><div class="empty-t">No levels yet</div><div class="empty-s">Add Beginner, Intermediate, Advance…</div></div>`:''}
+      ${!t.levels.length?`<div class="empty" style="padding:18px">
+        <div class="empty-i">📊</div>
+        <div class="empty-t">No levels yet</div>
+        <div class="empty-s">Add Beginner, Intermediate, Advance…</div>
+      </div>`:''}
       ${t.levels.map(l=>renderLevelCard(l)).join('')}
     </div>
-    ${t.levels.length&&t.levels.every(l=>l.brackets.length)?`<div class="card" style="border-color:var(--accent2)">
+    ${hasAllBrackets?`<div class="card" style="border-color:var(--accent2)">
       <div class="fbetween">
-        <div><div style="font-weight:700;color:var(--accent2)">✓ Setup Complete</div><div style="font-size:12px;color:var(--text2)">All brackets generated!</div></div>
+        <div><div style="font-weight:700;color:var(--accent2)">✓ Setup Complete</div>
+          <div style="font-size:12px;color:var(--text2)">All brackets generated!</div></div>
         <button class="btn btn-g" onclick="ST('matches')">Go to Matches →</button>
       </div>
     </div>`:''}
   </div>`;
 }
+
 function addLevelInput(){
-  const v=document.getElementById('new-lvl')?.value.trim();if(!v){toast('Enter level name','er');return;}
+  saveDrafts();
+  const v=document.getElementById('new-lvl')?.value.trim();
+  if(!v){toast('Enter level name','er');return;}
   if(S.tournament.levels.find(l=>l.name.toLowerCase()===v.toLowerCase())){toast('Already exists','er');return;}
-  S.tournament.levels.push({id:gid(),name:v,brackets:[],players:[]});
-  render();document.getElementById('new-lvl')&&(document.getElementById('new-lvl').value='');
+  // New level gets pairingMode = 'standard' by default; can be switched to 'balanced'
+  S.tournament.levels.push({id:gid(),name:v,brackets:[],players:[],highPlayers:[],midPlayers:[],pairingMode:'standard'});
+  render();
+  document.getElementById('new-lvl')&&(document.getElementById('new-lvl').value='');
 }
+
 function renderLevelCard(lvl){
   const isD=S.tournament.category==='Doubles';
-  return`<div class="panel" style="margin-bottom:9px">
-    <div class="fbetween" style="margin-bottom:9px">
-      <div style="font-weight:700;font-size:14px">${lvl.name}</div>
+  const isBalanced=isD&&lvl.pairingMode==='balanced';
+  const totalPl=lvl.players.length+(lvl.highPlayers||[]).length+(lvl.midPlayers||[]).length;
+
+  return`<div class="panel" style="margin-bottom:10px;border:1px solid ${isBalanced?'rgba(91,156,246,.4)':'var(--border)'}">
+
+    <!-- Header -->
+    <div class="fbetween" style="margin-bottom:10px">
+      <div style="font-weight:700;font-size:14px">${lvl.name}
+        ${isBalanced?`<span class="badge bg-b" style="font-size:9px;margin-left:6px;vertical-align:middle">⚖ Balanced Pairing</span>`:''}
+      </div>
       <div style="display:flex;gap:6px;align-items:center">
-        <span class="badge bg-n">${lvl.players.length} players</span>
-        <span class="badge bg-b">${lvl.brackets.length} brackets</span>
-        <button class="btn btn-r btn-xs" onclick="delLevel('${lvl.id}')">✕</button>
+        <span class="badge bg-n">${totalPl} player${totalPl!==1?'s':''}</span>
+        <span class="badge bg-b">${lvl.brackets.length} bracket${lvl.brackets.length!==1?'s':''}</span>
+        <button class="btn btn-r btn-xs" onclick="saveDrafts();delLevel('${lvl.id}')">✕</button>
       </div>
     </div>
-    <div class="frow">
-      <div class="fcol">
-        <label class="label">Add Players${isD?' (pairs randomized)':''}</label>
-        <textarea class="inp" id="pl-${lvl.id}" rows="3" placeholder="One name per line…"></textarea>
-      </div>
-      <div class="fcol" style="display:flex;flex-direction:column;justify-content:flex-end;gap:6px;max-width:110px">
-        <button class="btn btn-y btn-sm" onclick="addPlInput('${lvl.id}')">Add</button>
-        ${lvl.players.length?`<button class="btn btn-out btn-sm" onclick="clearPl('${lvl.id}')">Clear</button>`:''}
-      </div>
-    </div>
-    ${lvl.players.length?`<div class="tags" style="margin-bottom:9px">${lvl.players.map((p,i)=>`<span class="tag">${p}<button onclick="rmPl('${lvl.id}',${i})">×</button></span>`).join('')}</div>`:''}
-    ${lvl.players.length>=2?`<div class="frow" style="align-items:flex-end;margin-top:3px">
-      <div><label class="label">Brackets</label><input class="inp inp-sm" type="number" id="nbr-${lvl.id}" min="1" max="8" value="${lvl.brackets.length||1}" style="width:70px"/></div>
-      <button class="btn btn-g btn-sm" style="margin-left:8px" onclick="genBracketsBtn('${lvl.id}')">Generate</button>
+
+    ${isD?`<!-- Pairing mode toggle -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;align-items:center">
+      <span style="font-size:11px;color:var(--text2)">Pairing mode:</span>
+      <button class="btn btn-sm ${!isBalanced?'btn-y':'btn-out'}" onclick="saveDrafts();setPairingMode('${lvl.id}','standard')">Standard (random)</button>
+      <button class="btn btn-sm ${isBalanced?'btn-b':'btn-out'}" onclick="saveDrafts();setPairingMode('${lvl.id}','balanced')">Balanced (High/Mid tiers)</button>
     </div>`:''}
-    ${lvl.brackets.length?`<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${lvl.brackets.map(b=>`<span class="badge bg-g">✓ ${b.label} (${b.pairs.length} pairs)</span>`).join('')}</div>`:''}
+
+    ${isBalanced?renderBalancedInputs(lvl):renderStandardInputs(lvl)}
+
+    <!-- Bracket generation -->
+    ${totalPl>=2?`<div style="display:flex;align-items:flex-end;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <div><label class="label">Brackets</label>
+        <input class="inp inp-sm" type="number" id="nbr-${lvl.id}" min="1" max="12"
+          value="${lvl.brackets.length||1}" style="width:64px"/>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="saveDrafts();genBracketsBtn('${lvl.id}')">⚙ Generate Brackets</button>
+      ${lvl.brackets.length?`<button class="btn btn-out btn-xs" onclick="saveDrafts();clearBrackets('${lvl.id}')">Re-roll</button>`:''}
+    </div>`:''}
+
+    <!-- Generated brackets badges -->
+    ${lvl.brackets.length?`<div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">
+      ${lvl.brackets.map(b=>`<span class="badge bg-g">✓ ${b.label} (${b.pairs.length} pairs${b.balanced?' ⚖':''})</span>`).join('')}
+    </div>`:''}
   </div>`;
 }
+
+function renderStandardInputs(lvl){
+  const draftKey=`${lvl.id}_std`;
+  return`<div>
+    <div class="frow">
+      <div class="fcol">
+        <label class="label">Players — one per line</label>
+        <textarea class="inp" data-draft-key="${draftKey}" id="pl-${lvl.id}" rows="4"
+          placeholder="Player names, one per line…">${getDraft(draftKey)}</textarea>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:5px;margin-left:8px;min-width:90px">
+        <button class="btn btn-y btn-sm" onclick="saveDrafts();addStdPlayers('${lvl.id}')">Add</button>
+        ${lvl.players.length?`<button class="btn btn-out btn-sm" onclick="saveDrafts();clearPl('${lvl.id}')">Clear</button>`:''}
+      </div>
+    </div>
+    ${lvl.players.length?`<div class="tags" style="margin-top:6px">
+      ${lvl.players.map((p,i)=>`<span class="tag">${p}
+        <button onclick="saveDrafts();rmPl('${lvl.id}',${i})">×</button>
+      </span>`).join('')}
+    </div>`:''}
+  </div>`;
+}
+
+function renderBalancedInputs(lvl){
+  const dkH=`${lvl.id}_high`, dkM=`${lvl.id}_mid`;
+  const high=lvl.highPlayers||[], mid=lvl.midPlayers||[];
+  return`<div>
+    <div style="background:rgba(240,192,64,.06);border:1px solid rgba(240,192,64,.2);border-radius:var(--rs);padding:10px;margin-bottom:8px;font-size:11px;color:var(--text2)">
+      <strong style="color:var(--accent)">⚖ Balanced Pairing:</strong>
+      In Doubles, each pair will have exactly one High-tier and one Mid-tier player.
+      High players cannot be paired together. Add at least equal numbers in each tier.
+    </div>
+
+    <!-- HIGH tier -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">
+      <div>
+        <label class="label" style="color:var(--accent)">🔥 High Tier Players</label>
+        <textarea class="inp" data-draft-key="${dkH}" id="pl-high-${lvl.id}" rows="4"
+          placeholder="Advanced / High players…\nOne per line"
+          style="border-color:rgba(240,192,64,.3)">${getDraft(dkH)}</textarea>
+        <div style="display:flex;gap:5px;margin-top:5px">
+          <button class="btn btn-y btn-sm" onclick="saveDrafts();addTierPlayers('${lvl.id}','high')">Add High</button>
+          ${high.length?`<button class="btn btn-out btn-xs" onclick="saveDrafts();clearTier('${lvl.id}','high')">Clear</button>`:''}
+        </div>
+        ${high.length?`<div class="tags" style="margin-top:5px">
+          ${high.map((p,i)=>`<span class="tag" style="border-color:rgba(240,192,64,.3)">
+            <span style="font-size:9px;color:var(--accent);margin-right:2px">H</span>${p}
+            <button onclick="saveDrafts();rmTierPl('${lvl.id}','high',${i})">×</button>
+          </span>`).join('')}
+        </div>`:''}
+      </div>
+
+      <!-- MID tier -->
+      <div>
+        <label class="label" style="color:var(--accent3)">⭐ Mid Tier Players</label>
+        <textarea class="inp" data-draft-key="${dkM}" id="pl-mid-${lvl.id}" rows="4"
+          placeholder="Intermediate / Mid players…\nOne per line"
+          style="border-color:rgba(91,156,246,.3)">${getDraft(dkM)}</textarea>
+        <div style="display:flex;gap:5px;margin-top:5px">
+          <button class="btn btn-b btn-sm" onclick="saveDrafts();addTierPlayers('${lvl.id}','mid')">Add Mid</button>
+          ${mid.length?`<button class="btn btn-out btn-xs" onclick="saveDrafts();clearTier('${lvl.id}','mid')">Clear</button>`:''}
+        </div>
+        ${mid.length?`<div class="tags" style="margin-top:5px">
+          ${mid.map((p,i)=>`<span class="tag" style="border-color:rgba(91,156,246,.3)">
+            <span style="font-size:9px;color:var(--accent3);margin-right:2px">M</span>${p}
+            <button onclick="saveDrafts();rmTierPl('${lvl.id}','mid',${i})">×</button>
+          </span>`).join('')}
+        </div>`:''}
+      </div>
+    </div>
+
+    ${high.length||mid.length?`<div style="font-size:11px;color:var(--text3);margin-top:4px">
+      ${high.length} high · ${mid.length} mid · ${Math.min(high.length,mid.length)} balanced pairs possible
+      ${high.length!==mid.length?`<span style="color:var(--warn)"> ⚠ Uneven tiers — ${Math.abs(high.length-mid.length)} player${Math.abs(high.length-mid.length)!==1?'s':''} will be randomly paired</span>`:''}
+    </div>`:''}
+  </div>`;
+}
+
+// ── PLAYER MANAGEMENT ────────────────────────────────────
 function delLevel(id){S.tournament.levels=S.tournament.levels.filter(l=>l.id!==id);render();}
-function addPlInput(lvlId){const ta=document.getElementById(`pl-${lvlId}`);if(!ta)return;const lines=ta.value.split('\n').map(s=>s.trim()).filter(Boolean);const l=S.tournament.levels.find(x=>x.id===lvlId);if(l){l.players=[...l.players,...lines];l.brackets=[];}render();}
-function clearPl(lvlId){const l=S.tournament.levels.find(x=>x.id===lvlId);if(l){l.players=[];l.brackets=[];render();}}
+
+function setPairingMode(lvlId, mode){
+  const l=S.tournament.levels.find(x=>x.id===lvlId);
+  if(!l)return;
+  l.pairingMode=mode;
+  if(mode==='standard'){l.highPlayers=[];l.midPlayers=[];}
+  else{l.players=[];}  // switching to balanced clears standard list
+  l.brackets=[];
+  render();
+}
+
+function addStdPlayers(lvlId){
+  const ta=document.getElementById(`pl-${lvlId}`);
+  const l=S.tournament.levels.find(x=>x.id===lvlId);
+  if(!l)return;
+  const lines=(ta?.value||getDraft(`${lvlId}_std`)).split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!lines.length){toast('No names entered','er');return;}
+  l.players=[...l.players,...lines];
+  l.brackets=[];
+  clearDraft(`${lvlId}_std`);
+  render();
+  toast(`Added ${lines.length} player${lines.length!==1?'s':''}!`,'ok');
+}
+
+function addTierPlayers(lvlId, tier){
+  const elId=tier==='high'?`pl-high-${lvlId}`:`pl-mid-${lvlId}`;
+  const dkKey=`${lvlId}_${tier}`;
+  const ta=document.getElementById(elId);
+  const l=S.tournament.levels.find(x=>x.id===lvlId);
+  if(!l)return;
+  const lines=(ta?.value||getDraft(dkKey)).split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!lines.length){toast('No names entered','er');return;}
+  if(tier==='high') l.highPlayers=[...(l.highPlayers||[]),...lines];
+  else l.midPlayers=[...(l.midPlayers||[]),...lines];
+  l.brackets=[];
+  clearDraft(dkKey);
+  render();
+  toast(`Added ${lines.length} ${tier}-tier player${lines.length!==1?'s':''}!`,'ok');
+}
+
+function clearPl(lvlId){
+  const l=S.tournament.levels.find(x=>x.id===lvlId);
+  if(l){l.players=[];l.brackets=[];}
+  clearDraft(`${lvlId}_std`);render();
+}
+function clearTier(lvlId,tier){
+  const l=S.tournament.levels.find(x=>x.id===lvlId);
+  if(l){if(tier==='high')l.highPlayers=[];else l.midPlayers=[];l.brackets=[];}
+  clearDraft(`${lvlId}_${tier}`);render();
+}
 function rmPl(lvlId,idx){const l=S.tournament.levels.find(x=>x.id===lvlId);if(l){l.players.splice(idx,1);l.brackets=[];render();}}
+function rmTierPl(lvlId,tier,idx){
+  const l=S.tournament.levels.find(x=>x.id===lvlId);if(!l)return;
+  if(tier==='high')l.highPlayers.splice(idx,1);else l.midPlayers.splice(idx,1);
+  l.brackets=[];render();
+}
+function clearBrackets(lvlId){const l=S.tournament.levels.find(x=>x.id===lvlId);if(l){l.brackets=[];render();}}
+
+// ── SUBMIT ALL PLAYERS AT ONCE ───────────────────────────
+function submitAllPlayers(){
+  saveDrafts();
+  let totalAdded=0;
+  S.tournament.levels.forEach(l=>{
+    if(l.pairingMode==='balanced'){
+      const hLines=getDraft(`${l.id}_high`).split('\n').map(s=>s.trim()).filter(Boolean);
+      const mLines=getDraft(`${l.id}_mid`).split('\n').map(s=>s.trim()).filter(Boolean);
+      if(hLines.length){l.highPlayers=[...(l.highPlayers||[]),...hLines];clearDraft(`${l.id}_high`);totalAdded+=hLines.length;}
+      if(mLines.length){l.midPlayers=[...(l.midPlayers||[]),...mLines];clearDraft(`${l.id}_mid`);totalAdded+=mLines.length;}
+    } else {
+      const lines=getDraft(`${l.id}_std`).split('\n').map(s=>s.trim()).filter(Boolean);
+      if(lines.length){l.players=[...l.players,...lines];clearDraft(`${l.id}_std`);totalAdded+=lines.length;}
+    }
+    if(totalAdded>0) l.brackets=[];
+  });
+  if(totalAdded===0){toast('No pending players to add','er');return;}
+  render();
+  toast(`✓ Added ${totalAdded} player${totalAdded!==1?'s':''} across all levels!`,'ok');
+}
+
+// ── BRACKET GENERATION ───────────────────────────────────
 function genBracketsBtn(lvlId){
   const lvl=S.tournament.levels.find(l=>l.id===lvlId);
-  if(!lvl||lvl.players.length<2){toast('Need at least 2 players','er');return;}
+  if(!lvl){toast('Level not found','er');return;}
+  const isBalanced=lvl.pairingMode==='balanced';
+  const cat=S.tournament.category;
   const n=parseInt(document.getElementById(`nbr-${lvlId}`)?.value)||1;
-  const cat=S.tournament.category;let pairs;
-  if(cat==='Singles'){pairs=shuffle(lvl.players).map(p=>[p]);}
-  else{const sh=shuffle(lvl.players);pairs=[];for(let i=0;i<sh.length-1;i+=2)pairs.push([sh[i],sh[i+1]]);if(sh.length%2)pairs.push([sh[sh.length-1],'TBD']);}
-  const perB=Math.ceil(pairs.length/n);lvl.brackets=[];
-  for(let b=0;b<n;b++){const bp=pairs.slice(b*perB,(b+1)*perB);const matches=genRR(bp);lvl.brackets.push({id:gid(),label:'Bracket '+String.fromCharCode(65+b),pairs:bp,matches,standings:computeStandings(bp,matches)});}
-  render();toast('Brackets generated!','ok');if(S.sheetsUrl.trim())setTimeout(syncSetup,400);
+
+  // Count total players
+  const totalPl=isBalanced
+    ?(lvl.highPlayers||[]).length+(lvl.midPlayers||[]).length
+    :lvl.players.length;
+  if(totalPl<2){toast('Need at least 2 players','er');return;}
+
+  let pairs=[];
+
+  if(cat==='Singles'){
+    // Singles: every player is their own pair regardless of tier
+    const allPl=isBalanced
+      ?[...(lvl.highPlayers||[]),...(lvl.midPlayers||[])]
+      :lvl.players;
+    pairs=shuffle(allPl).map(p=>[p]);
+
+  } else if(isBalanced){
+    // Doubles balanced: pair each High with a Mid
+    const high=shuffle([...(lvl.highPlayers||[])]);
+    const mid=shuffle([...(lvl.midPlayers||[])]);
+    const balanced=[];
+    const minLen=Math.min(high.length,mid.length);
+    for(let i=0;i<minLen;i++) balanced.push([high[i],mid[i]]);
+    // Leftover players — pair among themselves randomly
+    const leftover=[...high.slice(minLen),...mid.slice(minLen)];
+    for(let i=0;i<leftover.length-1;i+=2) balanced.push([leftover[i],leftover[i+1]]);
+    if(leftover.length%2!==0) balanced.push([leftover[leftover.length-1],'TBD']);
+    pairs=balanced;
+
+  } else {
+    // Doubles standard: random pairing
+    const sh=shuffle(lvl.players);
+    for(let i=0;i<sh.length-1;i+=2) pairs.push([sh[i],sh[i+1]]);
+    if(sh.length%2) pairs.push([sh[sh.length-1],'TBD']);
+  }
+
+  const perB=Math.ceil(pairs.length/n);
+  lvl.brackets=[];
+  for(let b=0;b<n;b++){
+    const bp=pairs.slice(b*perB,(b+1)*perB);
+    const matches=genRR(bp);
+    lvl.brackets.push({
+      id:gid(),
+      label:'Bracket '+String.fromCharCode(65+b),
+      pairs:bp,matches,
+      standings:computeStandings(bp,matches),
+      balanced:isBalanced,
+    });
+  }
+  render();
+  toast('Brackets generated!','ok');
+  if(S.sheetsUrl.trim()) setTimeout(syncSetup,400);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1394,7 +1687,8 @@ function renderScorer(){
   if(selCourt&&selCourt.matchId){
     return renderScorerBoard(selCourt);
   }
-  // Otherwise show court picker
+  // Reset fullscreen state when on picker
+  S.scorerFullscreen=false;
   return`<div>
     <div class="title" style="margin-bottom:4px">Scorer — Select Court</div>
     <div class="sub" style="margin-bottom:18px">${t.name} · ${t.category}</div>
@@ -1423,56 +1717,96 @@ function renderScorer(){
   </div>`;
 }
 
+function toggleScorerFS(){
+  S.scorerFullscreen=!S.scorerFullscreen;
+  // Try native fullscreen API if available
+  if(S.scorerFullscreen){
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+  } else {
+    document.exitFullscreen?.().catch(()=>{});
+  }
+  render();
+}
+
 function renderScorerBoard(court){
   const m=getCourtMatch(court);const t=S.tournament;
-  if(!m)return`<div class="empty"><div class="empty-t">No match on this court</div><button class="btn btn-out btn-sm" style="margin-top:12px" onclick="S.scorerCourtId=null;render()">← Back</button></div>`;
-  return`<div>
-    <div class="fbetween" style="margin-bottom:14px">
-      <div>
-        <button class="btn btn-out btn-sm" onclick="S.scorerCourtId=null;render()">← All Courts</button>
-      </div>
-      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:var(--accent)">${court.name}</div>
-    </div>
+  if(!m)return`<div class="empty"><div class="empty-t">No match on this court</div>
+    <button class="btn btn-out btn-sm" style="margin-top:12px" onclick="S.scorerCourtId=null;render()">← Back</button></div>`;
 
-    <div class="scoreboard">
+  const fs=S.scorerFullscreen;
+  const s1=court.liveScore.s1, s2=court.liveScore.s2;
+  const leading=s1>s2?'left':s2>s1?'right':'tie';
+  const leadLabel=leading==='left'?'Leading':leading==='right'?'Leading':'Tied';
+  const name1=fmtPair(m.team1,t);
+  const name2=fmtPair(m.team2,t);
+
+  return`<div>
+    ${!fs?`<div class="fbetween" style="margin-bottom:14px">
+      <button class="btn btn-out btn-sm" onclick="S.scorerCourtId=null;S.scorerFullscreen=false;render()">← All Courts</button>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:var(--accent)">${court.name}</div>
+    </div>`:''}
+
+    <div class="scoreboard${fs?' fs-mode':''}">
+      <!-- HEADER -->
       <div class="scoreboard-header">
-        <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Live Match</div>
-        <div style="display:flex;gap:7px">
-          <span class="badge bg-g">● Recording</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          ${fs?`<button class="btn btn-out btn-xs" onclick="S.scorerCourtId=null;S.scorerFullscreen=false;render()">← Back</button>`:''}
+          <span style="font-size:13px;font-weight:700;color:var(--accent)">${court.name}</span>
+          <span class="badge bg-g">● Live</span>
+        </div>
+        <div style="display:flex;gap:7px;align-items:center">
+          <span style="font-size:11px;color:var(--text3)">${name1} vs ${name2}</span>
+          <button class="fs-btn" onclick="toggleScorerFS()" title="${fs?'Exit fullscreen':'Enter fullscreen'}">
+            ${fs?'⊠ Exit Full':'⛶ Full Screen'}
+          </button>
         </div>
       </div>
+
+      <!-- BODY: two colored halves + VS divider -->
       <div class="scoreboard-body">
-        <!-- LEFT SIDE — tap to add score -->
-        <div class="score-side" onclick="updateLiveScore('${court.id}',1,1)" title="Tap to add point">
-          <div class="tap-hint">Tap to score</div>
-          <div class="player-name">${fmtPair(m.team1,t)}</div>
-          <div class="big-score">${court.liveScore.s1}</div>
+
+        <!-- ── LEFT (amber/gold) ── -->
+        <div class="score-side left" onclick="updateLiveScore('${court.id}',1,1)">
+          <div class="tap-hint">▲ Tap anywhere to +1</div>
+          <div class="player-name">${name1}</div>
+          <div class="big-score">${s1}</div>
+          ${leading==='left'?`<div class="leading-badge amber">▲ Leading</div>`:
+            leading==='tie'?`<div class="leading-badge tie">— Tied</div>`:''}
           <div class="score-btns-row">
-            <button class="sbtn" onclick="event.stopPropagation();updateLiveScore('${court.id}',1,-1)">−</button>
-            <button class="sbtn" onclick="event.stopPropagation();updateLiveScore('${court.id}',1,1)">+</button>
+            <button class="sbtn" style="border-color:rgba(240,192,64,.4)" onclick="event.stopPropagation();updateLiveScore('${court.id}',1,-1)">−</button>
+            <button class="sbtn" style="border-color:rgba(240,192,64,.4)" onclick="event.stopPropagation();updateLiveScore('${court.id}',1,1)">+</button>
           </div>
         </div>
 
-        <!-- CENTER DIVIDER -->
+        <!-- ── VS DIVIDER ── -->
         <div class="score-divider">
           <div class="score-vs-text">VS</div>
+          <div class="score-set-label">${s1} — ${s2}</div>
         </div>
 
-        <!-- RIGHT SIDE -->
-        <div class="score-side" onclick="updateLiveScore('${court.id}',2,1)" title="Tap to add point">
-          <div class="tap-hint">Tap to score</div>
-          <div class="player-name">${fmtPair(m.team2,t)}</div>
-          <div class="big-score">${court.liveScore.s2}</div>
+        <!-- ── RIGHT (teal/green) ── -->
+        <div class="score-side right" onclick="updateLiveScore('${court.id}',2,1)">
+          <div class="tap-hint">▲ Tap anywhere to +1</div>
+          <div class="player-name">${name2}</div>
+          <div class="big-score">${s2}</div>
+          ${leading==='right'?`<div class="leading-badge teal">▲ Leading</div>`:
+            leading==='tie'?`<div class="leading-badge tie">— Tied</div>`:''}
           <div class="score-btns-row">
-            <button class="sbtn" onclick="event.stopPropagation();updateLiveScore('${court.id}',2,-1)">−</button>
-            <button class="sbtn" onclick="event.stopPropagation();updateLiveScore('${court.id}',2,1)">+</button>
+            <button class="sbtn" style="border-color:rgba(61,214,140,.4)" onclick="event.stopPropagation();updateLiveScore('${court.id}',2,-1)">−</button>
+            <button class="sbtn" style="border-color:rgba(61,214,140,.4)" onclick="event.stopPropagation();updateLiveScore('${court.id}',2,1)">+</button>
           </div>
         </div>
       </div>
+
+      <!-- FOOTER -->
       <div class="scoreboard-footer">
-        <div style="font-size:12px;color:var(--text3)">${court.name} · Tap side or + button to score</div>
+        <div style="font-size:11px;color:var(--text3)">
+          <span style="color:var(--accent)">■</span> ${name1} &nbsp;|&nbsp;
+          <span style="color:var(--accent2)">■</span> ${name2}
+          &nbsp;·&nbsp; Tap side or use +/− buttons
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-o btn-sm" onclick="swapCourtSides('${court.id}')">↔ Change Court (Swap Sides)</button>
+          <button class="btn btn-o btn-sm" onclick="swapCourtSides('${court.id}')">↔ Change Court</button>
           <button class="btn btn-r btn-sm" onclick="endCourtMatch('${court.id}')">🏁 End Match</button>
         </div>
       </div>
