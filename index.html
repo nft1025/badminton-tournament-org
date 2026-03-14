@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ShuttlePro — Badminton Tournament Organizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700;900&family=Barlow+Condensed:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#1a1f2e;--surface:#242938;--surface2:#2d3347;--surface3:#363d56;
+  --accent:#f0c040;--accent2:#3dd68c;--accent3:#5b9cf6;--danger:#f05555;--warn:#f08040;
+  --text:#e8eaf0;--text2:#9ba3c2;--text3:#5f6882;
+  --border:#3a4260;--border2:#4a5580;--r:12px;--rs:8px;
+}
+body{font-family:'Barlow',sans-serif;background:var(--primary);color:var(--text);min-height:100vh;overflow-x:hidden}
+h1,h2,h3,h4{font-family:'Barlow Condensed',sans-serif;letter-spacing:.02em}
+button,input,select,textarea{font-family:'Barlow',sans-serif}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* NAV */
+#app{min-height:100vh;display:flex;flex-direction:column}
+.nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;gap:8px;height:52px;flex-shrink:0;position:sticky;top:0;z-index:200}
+.nav-logo{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--accent);letter-spacing:.06em;flex:1;white-space:nowrap}
+.nav-logo span{color:var(--text);font-weight:400}
+.nav-tab{background:none;border:none;color:var(--text2);font-size:11px;font-weight:700;padding:5px 10px;border-radius:20px;transition:all .2s;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;white-space:nowrap}
+.nav-tab.active{background:var(--accent);color:var(--primary)}
+.nav-tab:hover:not(.active){background:var(--surface2);color:var(--text)}
+.nav-user{font-size:11px;color:var(--text3);padding:3px 9px;background:var(--surface2);border-radius:20px;white-space:nowrap}
+.logout-btn{background:none;border:1px solid var(--border);color:var(--text2);font-size:11px;padding:3px 9px;border-radius:20px;cursor:pointer;transition:all .2s}
+.logout-btn:hover{border-color:var(--danger);color:var(--danger)}
+
+/* SHEETS BAR */
+.sbar{background:#1d2235;border-bottom:1px solid var(--border);padding:5px 16px;display:flex;align-items:center;gap:10px;font-size:11px;flex-wrap:wrap}
+.sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .3s}
+.sdot.ok{background:var(--accent2)}.sdot.err{background:var(--danger)}
+.sdot.wait{background:var(--accent);animation:pulse 1s infinite}.sdot.off{background:var(--text3)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sbar-btn{background:none;border:1px solid var(--border2);color:var(--text2);font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;transition:all .2s}
+.sbar-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* MAIN */
+.main{flex:1;padding:20px;max-width:1440px;margin:0 auto;width:100%}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px}
+.card-sm{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);padding:12px}
+.panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);padding:12px;margin-bottom:8px}
+
+/* TYPE */
+.title{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700}
+.sub{font-size:13px;color:var(--text2);margin-top:2px}
+.label{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;display:block}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.bg-y{background:rgba(240,192,64,.15);color:var(--accent)}
+.bg-g{background:rgba(61,214,140,.15);color:var(--accent2)}
+.bg-b{background:rgba(91,156,246,.15);color:var(--accent3)}
+.bg-r{background:rgba(240,85,85,.15);color:var(--danger)}
+.bg-n{background:var(--surface3);color:var(--text2)}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 16px;border-radius:var(--rs);font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-y{background:var(--accent);color:var(--primary)}.btn-y:hover:not(:disabled){background:#f5cc55}
+.btn-g{background:var(--accent2);color:var(--primary)}.btn-g:hover:not(:disabled){background:#55e8a8}
+.btn-b{background:var(--accent3);color:#fff}.btn-b:hover:not(:disabled){background:#7baef8}
+.btn-r{background:var(--danger);color:#fff}.btn-r:hover:not(:disabled){background:#f56f6f}
+.btn-o{background:var(--warn);color:#fff}.btn-o:hover:not(:disabled){background:#f59050}
+.btn-out{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.btn-out:hover:not(:disabled){border-color:var(--text2);color:var(--text)}
+.btn-sm{padding:4px 11px;font-size:10px}.btn-xs{padding:3px 7px;font-size:9px}
+.btn-lg{padding:13px 26px;font-size:14px}.btn-full{width:100%}
+
+/* INPUTS */
+.inp{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:var(--rs);padding:8px 12px;font-size:13px;outline:none;transition:border .2s}
+.inp:focus{border-color:var(--accent)}.inp-sm{padding:5px 9px;font-size:11px}
+textarea.inp{resize:vertical;min-height:68px}
+.frow{display:flex;gap:10px;margin-bottom:10px}.fcol{flex:1}
+.tag{display:inline-flex;align-items:center;gap:4px;background:var(--surface3);border:1px solid var(--border);border-radius:20px;padding:3px 8px;font-size:11px;color:var(--text2)}
+.tag button{background:none;border:none;color:var(--text3);font-size:13px;line-height:1;cursor:pointer;padding:0}
+.tag button:hover{color:var(--danger)}.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+
+/* GRID */
+.g2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.fbetween{display:flex;align-items:center;justify-content:space-between}
+.flex{display:flex;align-items:center}.gap8{gap:8px}.gap12{gap:12px}
+
+/* STEPS */
+.steps{display:flex;align-items:center;margin-bottom:20px}
+.step{display:flex;align-items:center;gap:6px}
+.snum{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid var(--border);color:var(--text3);flex-shrink:0;transition:all .3s}
+.snum.done{background:var(--accent2);border-color:var(--accent2);color:var(--primary)}
+.snum.cur{background:var(--accent);border-color:var(--accent);color:var(--primary)}
+.slabel{font-size:11px;color:var(--text3);white-space:nowrap}.slabel.cur{color:var(--text)}
+.ssep{flex:1;height:1px;background:var(--border);margin:0 6px}
+
+/* TABS */
+.tabs{display:flex;gap:3px;background:var(--surface2);border-radius:var(--rs);padding:3px;width:fit-content;margin-bottom:16px}
+.tab{padding:5px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:none;background:none;color:var(--text2);transition:all .2s;text-transform:uppercase;letter-spacing:.05em}
+.tab.active{background:var(--accent);color:var(--primary)}.tab:hover:not(.active){color:var(--text)}
+
+/* BRACKET BUTTONS */
+.brkt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-top:12px}
+.brkt-btn{background:var(--surface2);border:2px solid var(--border);border-radius:var(--r);padding:20px 12px;text-align:center;cursor:pointer;transition:all .25s;position:relative;overflow:hidden}
+.brkt-btn::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(240,192,64,.07),transparent);opacity:0;transition:.3s}
+.brkt-btn:hover::after,.brkt-btn.sel::after{opacity:1}
+.brkt-btn:hover,.brkt-btn.sel{border-color:var(--accent);transform:translateY(-1px)}
+.brkt-btn.sel{background:rgba(240,192,64,.07)}
+.brkt-letter{font-family:'Barlow Condensed',sans-serif;font-size:46px;font-weight:900;color:var(--accent);line-height:1}
+.brkt-label{font-size:11px;font-weight:700;color:var(--text2);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.brkt-meta{font-size:10px;color:var(--text3);margin-top:2px}
+
+/* MATCH CARDS */
+.mc{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);padding:11px 13px;cursor:grab;transition:all .2s;user-select:none;margin-bottom:7px}
+.mc:active{cursor:grabbing;opacity:.7;transform:scale(.98)}
+.mc.cur{border-color:var(--accent2);background:rgba(61,214,140,.05)}
+.mc.queued{border-color:var(--accent3);background:rgba(91,156,246,.04)}
+.mc.done{opacity:.5}
+.mc-team{font-size:13px;font-weight:600;color:var(--text)}
+.mc-vs{font-size:9px;color:var(--text3);text-align:center;margin:2px 0;text-transform:uppercase;font-weight:700;letter-spacing:.12em}
+.mc-score{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--accent)}
+
+/* ═══ BADMINTON COURT LAYOUT ═══ */
+.courts-section{margin-bottom:24px}
+.courts-grid{display:grid;gap:16px}
+.courts-grid.n1{grid-template-columns:1fr}
+.courts-grid.n2{grid-template-columns:repeat(2,1fr)}
+.courts-grid.n3{grid-template-columns:repeat(3,1fr)}
+.courts-grid.n4{grid-template-columns:repeat(2,2fr)}
+.courts-grid.n5,.courts-grid.n6{grid-template-columns:repeat(3,1fr)}
+
+/* Full badminton court SVG-style design */
+.bmt-court{position:relative;border-radius:10px;overflow:hidden;min-height:240px;background:#1a4a25;border:2px solid #2d6b35;cursor:default;transition:box-shadow .2s}
+.bmt-court.active{border-color:var(--accent2);box-shadow:0 0 0 2px rgba(61,214,140,.3)}
+.bmt-court.empty{border-color:var(--border);background:var(--surface2);opacity:.7}
+.bmt-court-lines{position:absolute;inset:0;pointer-events:none}
+
+/* Court name label */
+.court-name-wrap{position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:10;display:flex;align-items:center;gap:4px}
+.court-name-display{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.1em;cursor:pointer;padding:2px 6px;border-radius:4px;transition:background .2s}
+.court-name-display:hover{background:rgba(255,255,255,.1)}
+.court-name-inp{background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:4px;padding:2px 8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;text-align:center;outline:none;width:120px}
+.court-edit-icon{font-size:10px;color:rgba(255,255,255,.35);cursor:pointer}
+
+/* Players on court */
+.court-content{position:relative;z-index:5;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding:32px 12px 12px}
+.court-half{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.court-half.top{padding-bottom:8px}
+.court-half.bottom{padding-top:8px}
+.court-player-name{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:#fff;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.6);line-height:1.1;max-width:150px;word-break:break-word}
+.court-score-big{font-family:'Barlow Condensed',sans-serif;font-size:52px;font-weight:900;color:var(--accent);line-height:1;text-shadow:0 2px 12px rgba(0,0,0,.5)}
+.court-net-area{height:18px;display:flex;align-items:center;justify-content:center;position:relative}
+.court-net-line{position:absolute;left:5%;right:5%;height:3px;background:rgba(255,255,255,.45);border-radius:2px}
+.court-net-post-l{position:absolute;left:2%;width:5px;height:14px;background:rgba(255,255,255,.5);border-radius:2px;top:-4px}
+.court-net-post-r{position:absolute;right:2%;width:5px;height:14px;background:rgba(255,255,255,.5);border-radius:2px;top:-4px}
+
+/* Court status bar */
+.court-status{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;opacity:.7;white-space:nowrap}
+.court-status.live{color:var(--accent2)}
+.court-status.empty{color:var(--text3)}
+
+/* Court actions overlay */
+.court-actions{position:absolute;top:8px;right:8px;z-index:10;display:flex;gap:4px}
+
+/* Queue panel below courts */
+.queue-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:16px}
+.queue-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);margin-bottom:6px;cursor:grab}
+.queue-row:active{cursor:grabbing;opacity:.7}
+.queue-num{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;color:var(--text3);min-width:28px;text-align:center}
+.queue-match-info{flex:1;min-width:0}
+.queue-match-teams{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.queue-match-meta{font-size:10px;color:var(--text3);margin-top:1px}
+.queue-assign{display:flex;align-items:center;gap:5px}
+
+/* SCORE MODAL */
+.sib{background:var(--surface2);border:2px solid var(--border);border-radius:var(--rs);padding:16px;text-align:center;position:relative}
+.sib.active-side{border-color:var(--accent)}
+.sid{font-family:'Barlow Condensed',sans-serif;font-size:72px;font-weight:900;color:var(--accent);line-height:1;cursor:pointer;user-select:none;transition:transform .1s}
+.sid:active{transform:scale(.95)}
+.sbtn{width:46px;height:46px;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--rs);font-size:22px;font-weight:700;color:var(--text);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;justify-content:center}
+.sbtn:hover{background:var(--accent);color:var(--primary)}
+
+/* ═══ SCORER SCOREBOARD ═══ */
+.scoreboard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
+.scoreboard-header{background:var(--surface2);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.scoreboard-body{display:grid;grid-template-columns:1fr 80px 1fr;min-height:260px}
+.score-side{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 14px;cursor:pointer;transition:background .15s;user-select:none;position:relative}
+.score-side:hover{background:rgba(255,255,255,.03)}
+.score-side:active{background:rgba(240,192,64,.06)}
+.score-side .tap-hint{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.score-side .player-name{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--text);text-align:center;margin-bottom:10px;line-height:1.1}
+.score-side .big-score{font-family:'Barlow Condensed',sans-serif;font-size:120px;font-weight:900;color:var(--accent);line-height:1;transition:transform .1s}
+.score-side:active .big-score{transform:scale(.96)}
+.score-side .score-btns-row{display:flex;gap:8px;margin-top:14px}
+.score-divider{display:flex;align-items:center;justify-content:center;background:var(--surface3);border-left:1px solid var(--border);border-right:1px solid var(--border)}
+.score-vs-text{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--text3);letter-spacing:.05em}
+.scoreboard-footer{border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center}
+
+/* STANDINGS */
+.stbl{width:100%;border-collapse:collapse;font-size:12px}
+.stbl th{padding:7px 10px;text-align:left;color:var(--text2);font-size:10px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);font-weight:700}
+.stbl td{padding:8px 10px;border-bottom:1px solid rgba(58,66,96,.4)}
+.stbl tr:hover td{background:rgba(255,255,255,.02)}
+
+/* CROSSOVER */
+.bv-stage{display:flex;flex-direction:column;gap:14px;min-width:190px}
+.bv-title{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;text-align:center;margin-bottom:7px}
+.bv-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);overflow:hidden;min-width:175px}
+.bv-team{padding:7px 11px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.bv-team.win{color:var(--accent2);background:rgba(61,214,140,.06)}
+.bv-team.bye{color:var(--text3);font-style:italic}
+
+/* HOME STATS */
+.home-stat{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);padding:14px;text-align:center}
+.home-stat-n{font-family:'Barlow Condensed',sans-serif;font-size:34px;font-weight:900;color:var(--accent);line-height:1}
+.home-stat-l{font-size:10px;color:var(--text2);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+
+/* END BANNER */
+.end-banner{background:linear-gradient(135deg,rgba(240,192,64,.12),rgba(61,214,140,.08));border:1px solid var(--accent);border-radius:var(--r);padding:18px 22px}
+
+/* HISTORY TABLE */
+.htbl{width:100%;border-collapse:collapse;font-size:12px}
+.htbl th{padding:8px 12px;text-align:left;font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);font-weight:700}
+.htbl td{padding:10px 12px;border-bottom:1px solid rgba(58,66,96,.35);font-size:12px}
+.htbl tr:hover td{background:rgba(255,255,255,.02)}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px)}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:24px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto}
+.modal-title{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;margin-bottom:16px}
+
+/* LOGIN */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--primary);position:relative;overflow:hidden}
+.login-wrap::before{content:'';position:absolute;width:700px;height:700px;background:radial-gradient(circle,rgba(240,192,64,.07) 0%,transparent 70%);top:-200px;right:-200px;pointer-events:none}
+.login-wrap::after{content:'';position:absolute;width:500px;height:500px;background:radial-gradient(circle,rgba(61,214,140,.05) 0%,transparent 70%);bottom:-100px;left:-100px;pointer-events:none}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px 34px;width:100%;max-width:400px;position:relative;z-index:1}
+.login-logo{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:28px;color:var(--accent);text-align:center;letter-spacing:.06em}
+.login-sub{color:var(--text2);text-align:center;font-size:13px;margin-bottom:26px;margin-top:2px}
+.roles{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:20px}
+.role-btn{background:var(--surface2);border:2px solid transparent;border-radius:var(--rs);padding:10px 7px;text-align:center;cursor:pointer;transition:all .2s}
+.role-btn.sel{border-color:var(--accent);background:rgba(240,192,64,.1)}
+.role-icon{font-size:18px;margin-bottom:2px}.role-name{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em}
+.role-btn.sel .role-name{color:var(--accent)}
+.pw-wrap{position:relative}
+.pw-wrap .inp{padding-right:36px}
+.pw-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px}
+.pw-toggle:hover{color:var(--text)}
+
+/* TOAST */
+.toast-wrap{position:fixed;bottom:18px;right:18px;z-index:3000;display:flex;flex-direction:column;gap:6px}
+.toast{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--rs);padding:9px 14px;font-size:12px;display:flex;align-items:center;gap:7px;animation:tIn .3s ease;max-width:280px}
+.toast.ok{border-color:var(--accent2);color:var(--accent2)}.toast.er{border-color:var(--danger);color:var(--danger)}
+.toast.inf{border-color:var(--accent3);color:var(--accent3)}.toast.sy{border-color:var(--accent);color:var(--accent)}
+@keyframes tIn{from{transform:translateX(110%);opacity:0}to{transform:none;opacity:1}}
+
+/* EMPTY */
+.empty{text-align:center;padding:40px 20px;color:var(--text3)}
+.empty-i{font-size:42px;margin-bottom:9px;opacity:.35}.empty-t{font-size:15px;color:var(--text2)}
+.empty-s{font-size:12px;color:var(--text3);margin-top:4px}
+
+.scroll{max-height:380px;overflow-y:auto;padding-right:3px}
+hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
+
+@media(max-width:768px){
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .courts-grid.n2,.courts-grid.n3,.courts-grid.n4,.courts-grid.n5,.courts-grid.n6{grid-template-columns:1fr}
+  .scoreboard-body{grid-template-columns:1fr}
+  .score-divider{display:none}
+  .main{padding:12px}.nav{gap:5px}.nav-tab{font-size:10px;padding:4px 7px}
+  .score-side .big-score{font-size:80px}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast-wrap" id="toasts"></div>
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════
+const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzdnFUHUwp3tEacOem6QF7uEk4GSXMEJYjiPArJMRkAEov-aKyhCdSbY9FyPsa7lHKF-Q/exec';
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+const S={
+  user:null,role:null,
+  sheetsUrl:APPS_SCRIPT_URL,sheetsStatus:'off',sheetsMsg:'',
+  adminTab:'home',matchTab:'rr',pubTab:'standings',
+  tournament:null,
+  courts:[],            // [{id,name,matchId,bracketId,levelId,liveScore:{s1,s2}}]
+  numCourts:0,          // set during tournament creation
+  courtsSetup:false,
+  matchQueue:[],        // [{matchId,bracketId,levelId,courtId?}]
+  selectedLvl:null,selectedBr:null,
+  scoreModal:null,crossScoreModal:null,
+  scorerCourtId:null,   // which court scorer is entering for
+  userModal:null,endModal:false,
+  dragSrc:null,
+  history:[],historyLoaded:false,
+  editingCourtId:null,
+  _loginRole:'admin',_loginErr:'',_tCat:null,_saTab:'users',
+  users:[
+    {id:1,username:'admin',password:'admin123',role:'admin',name:'Tournament Admin'},
+    {id:2,username:'scorer',password:'scorer123',role:'scorer',name:'Court Scorer'},
+    {id:3,username:'superadmin',password:'super123',role:'superadmin',name:'Super Admin'},
+  ],
+};
+
+// ═══════════════════════════════════════════════════════════
+//  SHEETS
+// ═══════════════════════════════════════════════════════════
+async function sheetsPost(action,data){
+  const url=S.sheetsUrl.trim();
+  if(!url){S.sheetsStatus='off';return{ok:false,error:'No URL'};}
+  S.sheetsStatus='syncing';updateSheetsDot();
+  try{
+    const res=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})});
+    const json=await res.json();
+    S.sheetsStatus=json.ok?'ok':'err';
+    S.sheetsMsg=json.ok?'Synced '+new Date().toLocaleTimeString():(json.error||'Error');
+    updateSheetsDot();return json;
+  }catch(e){S.sheetsStatus='err';S.sheetsMsg=e.message;updateSheetsDot();return{ok:false,error:e.message};}
+}
+function updateSheetsDot(){const d=document.querySelector('.sbar .sdot');if(!d)return;const c={off:'off',ok:'ok',err:'err',syncing:'wait'};d.className='sdot '+(c[S.sheetsStatus]||'off');}
+async function syncSetup(){if(!S.tournament)return;const t=S.tournament;await sheetsPost('saveTournamentSetup',{tournamentId:t.id,tournamentName:t.name,category:t.category,createdAt:t.created,levels:t.levels.map(l=>({name:l.name,brackets:l.brackets.map(b=>({label:b.label,pairs:b.pairs}))}))});}
+async function syncMatchScore(match,levelName,bracketLabel,isXover){if(!S.tournament||!S.sheetsUrl.trim())return;const t=S.tournament;const winner=match.score1>match.score2?match.team1||match.t1:match.team2||match.t2;await sheetsPost('saveMatchScore',{tournamentName:t.name,levelName:levelName||'',bracketLabel:bracketLabel||'',round:match.round||'',team1:match.team1||match.t1,team2:match.team2||match.t2,score1:match.score1,score2:match.score2,winner,stage:isXover?bracketLabel:'Round Robin',timestamp:new Date().toISOString()});}
+async function syncStandings(){if(!S.tournament)return;refreshStandings();const t=S.tournament;await sheetsPost('saveFinalStandings',{tournamentName:t.name,levels:t.levels.map(l=>({name:l.name,brackets:l.brackets.map(b=>({label:b.label,standings:b.standings.map(s=>({pair:s.pair,W:s.W,L:s.L,PF:s.PF,PA:s.PA,pts:s.pts}))}))}))}); }
+async function syncCrossover(){if(!S.tournament||!S.tournament.crossover)return;const t=S.tournament;await sheetsPost('saveCrossoverResult',{tournamentName:t.name,stages:t.crossover.stages.map(st=>({name:st.name,matches:st.matches.map(m=>({t1:m.t1,t2:m.t2,score1:m.score1,score2:m.score2,winner:m.winner,status:m.status}))}))});}
+async function syncEndTournament(){const t=S.tournament;if(!t)return;let champion='',runnerUp='';if(t.crossover){const f=t.crossover.stages.find(s=>s.name==='Final');if(f&&f.matches[0]){const fm=f.matches[0];if(fm.winner)champion=fmtPair(fm.winner.pair);const loser=fm.winner&&fm.t1&&fm.t2?(JSON.stringify(fm.winner.pair)===JSON.stringify(fm.t1.pair)?fm.t2:fm.t1):null;if(loser)runnerUp=fmtPair(loser.pair);}}const totalPlayers=t.levels.reduce((a,l)=>a+l.players.length,0);const totalMatches=t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.length,0),0);const res=await sheetsPost('endTournament',{tournamentName:t.name,category:t.category,totalPlayers,champion,runnerUp,totalMatches,createdAt:t.created,endedAt:new Date().toISOString()});if(res.ok){S.history.unshift({id:S.history.length+1,name:t.name,category:t.category,totalPlayers,champion,runnerUp,totalMatches,createdAt:t.created,endedAt:new Date().toISOString()});toast('Saved to Sheets history!','ok');}}
+async function loadHistory(){if(!S.sheetsUrl.trim()){S.historyLoaded=true;return;}const res=await sheetsPost('getHistory',{});if(res.ok&&res.history){S.history=res.history.reverse();S.historyLoaded=true;}}
+
+// ═══════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════
+function toast(msg,type='inf'){const tc=document.getElementById('toasts');const t=document.createElement('div');t.className=`toast ${type}`;const icons={ok:'✓',er:'✕',inf:'ℹ',sy:'⟳'};t.innerHTML=`<span>${icons[type]||'ℹ'}</span><span>${msg}</span>`;tc.appendChild(t);setTimeout(()=>t.remove(),3500);}
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+function gid(){return Math.random().toString(36).slice(2,9)}
+function fmtPair(pair,t){if(!pair)return'TBD';if(typeof pair==='string')return pair;if(!t||t.category==='Doubles')return pair.filter(Boolean).join(' / ')||'TBD';return pair[0]||'TBD';}
+function getBrMatch(brId,mId){for(const l of S.tournament.levels)for(const b of l.brackets)if(b.id===brId)return b.matches.find(m=>m.id===mId);}
+function getLvlAndBr(brId){for(const l of S.tournament.levels)for(const b of l.brackets)if(b.id===brId)return{lvl:l,br:b};return{};}
+
+// ═══════════════════════════════════════════════════════════
+//  ROUND ROBIN
+// ═══════════════════════════════════════════════════════════
+function genRR(pairs){const n=pairs.length;if(n<2)return[];const list=n%2===0?[...pairs]:[...pairs,'BYE'];const len=list.length;const matches=[];for(let r=0;r<len-1;r++){for(let i=0;i<len/2;i++){const a=list[i],b=list[len-1-i];if(a!=='BYE'&&b!=='BYE')matches.push({id:gid(),team1:a,team2:b,score1:null,score2:null,status:'pending',round:r+1});}list.splice(1,0,list.pop());}return matches;}
+
+// ═══════════════════════════════════════════════════════════
+//  STANDINGS
+// ═══════════════════════════════════════════════════════════
+function computeStandings(pairs,matches){const map={};pairs.forEach(p=>{const k=JSON.stringify(p);map[k]={pair:p,key:k,W:0,L:0,PF:0,PA:0,pts:0};});matches.filter(m=>m.status==='finished').forEach(m=>{const k1=JSON.stringify(m.team1),k2=JSON.stringify(m.team2);if(!map[k1]||!map[k2])return;const s1=m.score1||0,s2=m.score2||0;map[k1].PF+=s1;map[k1].PA+=s2;map[k2].PF+=s2;map[k2].PA+=s1;if(s1>s2){map[k1].W++;map[k1].pts+=2;map[k2].L++;}else if(s2>s1){map[k2].W++;map[k2].pts+=2;map[k1].L++;}else{map[k1].pts++;map[k2].pts++;}});return Object.values(map).sort((a,b)=>{if(b.pts!==a.pts)return b.pts-a.pts;const h=h2h(a.pair,b.pair,matches);if(h)return h;return(b.PF-b.PA)-(a.PF-a.PA);});}
+function h2h(pA,pB,matches){const m=matches.find(m=>{const sa=JSON.stringify(pA),sb=JSON.stringify(pB);return(JSON.stringify(m.team1)===sa&&JSON.stringify(m.team2)===sb)||(JSON.stringify(m.team1)===sb&&JSON.stringify(m.team2)===sa);});if(!m||m.status!=='finished')return 0;const myFirst=JSON.stringify(m.team1)===JSON.stringify(pA);const s1=m.score1||0,s2=m.score2||0;if(myFirst)return s1>s2?-1:s2>s1?1:0;return s2>s1?-1:s1>s2?1:0;}
+function refreshStandings(){if(!S.tournament)return;S.tournament.levels.forEach(l=>l.brackets.forEach(b=>{b.standings=computeStandings(b.pairs,b.matches);}));}
+
+// ═══════════════════════════════════════════════════════════
+//  COURTS
+// ═══════════════════════════════════════════════════════════
+function initCourts(n){
+  S.courts=[];
+  for(let i=0;i<n;i++){
+    S.courts.push({id:gid(),name:'Court '+(i+1),matchId:null,bracketId:null,levelId:null,liveScore:{s1:0,s2:0}});
+  }
+  S.numCourts=n;S.courtsSetup=true;
+}
+
+function getCourtMatch(court){if(!court.matchId)return null;return getBrMatch(court.bracketId,court.matchId);}
+
+function assignToCourt(courtId,matchId,bracketId,levelId){
+  const court=S.courts.find(c=>c.id===courtId);
+  if(!court)return;
+  // Free previous match on this court
+  if(court.matchId){toast('Court already has a match — end it first','er');return;}
+  court.matchId=matchId;court.bracketId=bracketId;court.levelId=levelId;
+  court.liveScore={s1:0,s2:0};
+  S.matchQueue=S.matchQueue.filter(q=>q.matchId!==matchId);
+  toast(`Match assigned to ${court.name}`,'ok');
+  render();
+}
+
+function endCourtMatch(courtId){
+  const court=S.courts.find(c=>c.id===courtId);
+  if(!court||!court.matchId)return;
+  S.scoreModal={courtId,mId:court.matchId,brId:court.bracketId,lvlId:court.levelId,s1:court.liveScore.s1,s2:court.liveScore.s2};
+  render();
+}
+
+function assignNextFromQueue(courtId){
+  const next=S.matchQueue[0];
+  if(!next){toast('Queue is empty','er');return;}
+  const court=S.courts.find(c=>c.id===courtId);
+  if(court&&court.matchId){toast('Court is busy','er');return;}
+  assignToCourt(courtId,next.matchId,next.bracketId,next.levelId);
+}
+
+function updateLiveScore(courtId,side,delta){
+  const c=S.courts.find(x=>x.id===courtId);if(!c)return;
+  if(side===1)c.liveScore.s1=Math.max(0,c.liveScore.s1+delta);
+  else c.liveScore.s2=Math.max(0,c.liveScore.s2+delta);
+  render();
+}
+
+function swapCourtSides(courtId){
+  const c=S.courts.find(x=>x.id===courtId);if(!c)return;
+  [c.liveScore.s1,c.liveScore.s2]=[c.liveScore.s2,c.liveScore.s1];
+  toast('Sides swapped (Change Court)','ok');render();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CROSSOVER
+// ═══════════════════════════════════════════════════════════
+function initCrossover(){
+  refreshStandings();const t=S.tournament;
+  const rank1=[];t.levels.forEach(l=>l.brackets.forEach(b=>{if(b.standings[0])rank1.push({pair:b.standings[0].pair,from:b.label,levelId:l.id,bracketId:b.id});}));
+  if(rank1.length<2){toast('Need at least 2 brackets','er');return;}
+  t.crossover={stages:buildStages(shuffle(rank1))};render();toast('Crossover bracket created!','ok');
+}
+function buildStages(teams){const n=teams.length;if(n===2)return[{name:'Final',matches:[{id:gid(),t1:teams[0],t2:teams[1],score1:null,score2:null,status:'pending',winner:null}]}];if(n===3){const bi=Math.floor(Math.random()*3);const bye=teams[bi];const oth=teams.filter((_,i)=>i!==bi);return[{name:'Semi-Final',matches:[{id:gid(),t1:oth[0],t2:oth[1],score1:null,score2:null,status:'pending',winner:null},{id:gid(),t1:bye,t2:null,score1:null,score2:null,status:'bye',winner:bye,isBye:true}]},{name:'Final',matches:[{id:gid(),t1:null,t2:null,score1:null,score2:null,status:'pending',winner:null}]}];}if(n===4)return[{name:'Semi-Final',matches:[{id:gid(),t1:teams[0],t2:teams[3],score1:null,score2:null,status:'pending',winner:null},{id:gid(),t1:teams[1],t2:teams[2],score1:null,score2:null,status:'pending',winner:null}]},{name:'Final',matches:[{id:gid(),t1:null,t2:null,score1:null,score2:null,status:'pending',winner:null}]}];const half=Math.ceil(n/2);const semis=[];for(let i=0;i<half;i++){const opp=teams[n-1-i]||null;semis.push({id:gid(),t1:teams[i],t2:opp,score1:null,score2:null,status:opp?'pending':'bye',winner:opp?null:teams[i],isBye:!opp});}const stages=[{name:'Quarter-Final',matches:semis}];const sfCount=Math.ceil(half/2);const sfM=[];for(let i=0;i<sfCount;i++)sfM.push({id:gid(),t1:null,t2:null,score1:null,score2:null,status:'pending',winner:null});stages.push({name:'Semi-Final',matches:sfM});stages.push({name:'Final',matches:[{id:gid(),t1:null,t2:null,score1:null,score2:null,status:'pending',winner:null}]});return stages;}
+function advanceCrossover(si,mi,winner){const stages=S.tournament.crossover.stages;const m=stages[si].matches[mi];m.winner=winner;m.status='finished';const ns=stages[si+1];if(ns){const nm=ns.matches.find(x=>!x.t1||!x.t2);if(nm){if(!nm.t1)nm.t1=winner;else if(!nm.t2)nm.t2=winner;}}}
+function allBrDone(){if(!S.tournament)return false;return S.tournament.levels.every(l=>l.brackets.length&&l.brackets.every(b=>b.matches.every(m=>m.status==='finished')));}
+
+// ═══════════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════════
+function render(){
+  const app=document.getElementById('app');
+  if(!S.user){app.innerHTML=renderLogin();return;}
+  const role=S.role;
+  const tabs=role==='superadmin'?['home','super-admin','tournament-setup','matches','courts','public-view']:
+    role==='admin'?['home','tournament-setup','matches','courts','public-view']:
+    role==='scorer'?['scorer']:['public-view'];
+  const tab=S.adminTab;
+  app.innerHTML=`
+    <nav class="nav">
+      <div class="nav-logo">🏸 SHUTTLE<span>PRO</span></div>
+      ${tabs.map(t=>`<button class="nav-tab${tab===t?' active':''}" onclick="ST('${t}')">${t.replace(/-/g,' ')}</button>`).join('')}
+      <div class="nav-user">${S.user.name}</div>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </nav>
+    ${role==='superadmin'&&tab==='super-admin'?renderSheetsBar():''}
+    <div class="main">
+      ${tab==='home'?renderHome():''}
+      ${tab==='super-admin'?renderSuperAdmin():''}
+      ${tab==='tournament-setup'?renderSetup():''}
+      ${tab==='matches'?renderMatches():''}
+      ${tab==='courts'?renderCourtsPage():''}
+      ${tab==='public-view'?renderPublic():''}
+      ${tab==='scorer'?renderScorer():''}
+    </div>
+    ${S.scoreModal?renderScoreModal():''}
+    ${S.crossScoreModal?renderCrossScoreModal():''}
+    ${S.userModal?renderUserModal():''}
+    ${S.endModal?renderEndModal():''}
+  `;
+}
+function ST(t){S.adminTab=t;if(t==='super-admin'&&!S.historyLoaded)loadHistory().then(render);else render();}
+function logout(){S.user=null;S.role=null;S.adminTab='home';render();}
+
+// ═══════════════════════════════════════════════════════════
+//  SHEETS BAR (super admin only)
+// ═══════════════════════════════════════════════════════════
+function renderSheetsBar(){
+  const labels={off:'Not tested',ok:S.sheetsMsg||'Connected',err:'Error: '+(S.sheetsMsg||''),syncing:'Syncing…'};
+  const cls={off:'off',ok:'ok',err:'err',syncing:'wait'};
+  const st=S.sheetsStatus;
+  return `<div class="sbar">
+    <div class="sdot ${cls[st]}"></div>
+    <span style="color:var(--text2);font-weight:600">Google Sheets</span>
+    <span style="color:${st==='ok'?'var(--accent2)':st==='err'?'var(--danger)':st==='syncing'?'var(--accent)':'var(--text3)'}">${labels[st]}</span>
+    <span style="color:var(--text3);font-size:10px;font-family:monospace;background:var(--surface2);padding:2px 8px;border-radius:4px" title="${S.sheetsUrl}">${S.sheetsUrl.slice(0,60)}…</span>
+    <button class="sbar-btn" onclick="testSheets()">Test</button>
+    <button class="sbar-btn" onclick="manualSync()">Sync All</button>
+  </div>`;
+}
+async function testSheets(){toast('Testing…','inf');const r=await sheetsPost('getHistory',{});if(r.ok)toast('Connected ✓','ok');else toast('Failed: '+r.error,'er');render();}
+async function manualSync(){if(!S.tournament){toast('No active tournament','er');return;}toast('Syncing…','inf');await syncSetup();await syncStandings();if(S.tournament.crossover)await syncCrossover();toast('Synced!','ok');}
+
+// ═══════════════════════════════════════════════════════════
+//  LOGIN
+// ═══════════════════════════════════════════════════════════
+function renderLogin(){
+  const needPw=S._loginRole&&S._loginRole!=='public';
+  return `<div class="login-wrap">
+    <div class="login-box">
+      <div class="login-logo">🏸 SHUTTLEPRO</div>
+      <div class="login-sub">Badminton Tournament Organizer</div>
+      <div class="roles">
+        ${[{r:'admin',icon:'⚙️',n:'Admin'},{r:'scorer',icon:'📋',n:'Scorer'},{r:'public',icon:'👁️',n:'Public'},{r:'superadmin',icon:'👑',n:'Super Admin'}].map(x=>`
+          <div class="role-btn${S._loginRole===x.r?' sel':''}" onclick="S._loginRole='${x.r}';S._loginErr='';render()">
+            <div class="role-icon">${x.icon}</div>
+            <div class="role-name">${x.n}</div>
+          </div>`).join('')}
+      </div>
+      ${needPw?`
+        <div style="margin-bottom:10px"><label class="label">Username</label><input class="inp" id="li-u" placeholder="Username" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+        <div style="margin-bottom:18px"><label class="label">Password</label>
+          <div class="pw-wrap">
+            <input class="inp" id="li-p" type="password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()"/>
+            <button class="pw-toggle" onclick="togglePwVis('li-p','li-eye')" tabindex="-1"><span id="li-eye">👁</span></button>
+          </div>
+        </div>`:'<div style="height:10px"></div>'}
+      <button class="btn btn-y btn-full" style="padding:11px;font-size:13px" onclick="doLogin()">
+        ${S._loginRole==='public'?'View Tournament':'Login'}
+      </button>
+      ${S._loginErr?`<div style="color:var(--danger);font-size:12px;text-align:center;margin-top:9px">${S._loginErr}</div>`:''}
+    </div>
+  </div>`;
+}
+function togglePwVis(inputId,iconId){const i=document.getElementById(inputId);const ic=document.getElementById(iconId);if(!i)return;if(i.type==='password'){i.type='text';if(ic)ic.textContent='🙈';}else{i.type='password';if(ic)ic.textContent='👁';}}
+function doLogin(){
+  const role=S._loginRole;if(!role){toast('Select a role','er');return;}
+  if(role==='public'){S.user={name:'Public Viewer'};S.role='public';S.adminTab='public-view';render();return;}
+  const u=document.getElementById('li-u')?.value;const p=document.getElementById('li-p')?.value;
+  const found=S.users.find(x=>x.username===u&&x.password===p&&x.role===role);
+  if(!found){S._loginErr='Invalid credentials';render();return;}
+  S.user=found;S.role=role;S.adminTab=role==='superadmin'?'home':role==='scorer'?'scorer':'home';render();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HOME
+// ═══════════════════════════════════════════════════════════
+function renderHome(){
+  const t=S.tournament;
+  if(!t)return`<div>
+    <div class="title" style="margin-bottom:4px">Welcome, ${S.user.name}</div>
+    <div class="sub" style="margin-bottom:22px">No active tournament. Create one to get started.</div>
+    <button class="btn btn-y btn-lg" onclick="ST('tournament-setup')">+ Create Tournament</button>
+  </div>`;
+  refreshStandings();
+  const totalP=t.levels.reduce((a,l)=>a+l.players.length,0);
+  const totalM=t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.length,0),0);
+  const doneM=t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.filter(m=>m.status==='finished').length,0),0);
+  const xDone=t.crossover&&t.crossover.stages.every(s=>s.matches.every(m=>m.status==='finished'||m.status==='bye'));
+  const finalist=getFinalist();
+  const activeCourts=S.courts.filter(c=>c.matchId).length;
+  return`<div>
+    <div class="fbetween" style="margin-bottom:18px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="title">${t.name}</div>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <span class="badge bg-y">${t.category}</span>
+          <span class="badge bg-n">${t.levels.length} level${t.levels.length!==1?'s':''}</span>
+          <span class="badge bg-b">${S.numCourts} court${S.numCourts!==1?'s':''}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="btn btn-b btn-sm" onclick="ST('courts')">🏸 Courts</button>
+        <button class="btn btn-out btn-sm" onclick="ST('public-view')">Public View</button>
+        ${xDone||allBrDone()?`<button class="btn btn-r btn-sm" onclick="S.endModal=true;render()">🏁 End Tournament</button>`:''}
+      </div>
+    </div>
+    <div class="g4" style="margin-bottom:18px">
+      <div class="home-stat"><div class="home-stat-n">${totalP}</div><div class="home-stat-l">Players</div></div>
+      <div class="home-stat"><div class="home-stat-n">${activeCourts}/${S.numCourts}</div><div class="home-stat-l">Courts Active</div></div>
+      <div class="home-stat"><div class="home-stat-n">${doneM}/${totalM}</div><div class="home-stat-l">Matches Done</div></div>
+      <div class="home-stat" style="${doneM===totalM&&totalM>0?'border-color:var(--accent2)':''}">
+        <div class="home-stat-n" style="${doneM===totalM&&totalM>0?'color:var(--accent2)':''}">${totalM>0?Math.round(doneM/totalM*100):0}%</div>
+        <div class="home-stat-l">Progress</div>
+      </div>
+    </div>
+    ${finalist?`<div class="end-banner" style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">🏆 Champion</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;color:var(--accent2)">${finalist}</div>
+      <button class="btn btn-r btn-sm" style="margin-top:10px" onclick="S.endModal=true;render()">End Tournament & Save</button>
+    </div>`:''}
+    <div class="g2">
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:12px">Active Courts</div>
+        ${S.courts.length===0?`<div class="empty" style="padding:16px"><div class="empty-s">No courts set up</div></div>`:
+          S.courts.map(c=>{const m=getCourtMatch(c);return`<div class="panel fbetween" style="margin-bottom:6px">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--accent)">${c.name}</div>
+              ${m?`<div style="font-size:11px;color:var(--text2);margin-top:2px">${fmtPair(m.team1,t)} vs ${fmtPair(m.team2,t)}</div>
+              <div style="font-size:11px;color:var(--accent);font-family:'Barlow Condensed',sans-serif;font-weight:700">${c.liveScore.s1} — ${c.liveScore.s2}</div>`:
+              `<div style="font-size:11px;color:var(--text3)">Empty</div>`}
+            </div>
+            ${m?`<span class="badge bg-g">● Live</span>`:`<span class="badge bg-n">Available</span>`}
+          </div>`}).join('')}
+      </div>
+      <div class="card">
+        <div class="fbetween" style="margin-bottom:10px">
+          <div style="font-weight:700">Match Queue</div>
+          <span class="badge bg-b">${S.matchQueue.length}</span>
+        </div>
+        ${S.matchQueue.length?S.matchQueue.slice(0,5).map((q,i)=>{
+          const m=getBrMatch(q.bracketId,q.matchId);const{lvl,br}=getLvlAndBr(q.bracketId);if(!m)return'';
+          return`<div class="panel fbetween" style="margin-bottom:5px">
+            <div><div style="font-size:10px;color:var(--text3)">#${i+1} · ${br?.label||''}</div>
+            <div style="font-size:12px;font-weight:600">${fmtPair(m.team1,t)} vs ${fmtPair(m.team2,t)}</div></div>
+            <button class="btn btn-y btn-xs" onclick="ST('courts')">Assign</button>
+          </div>`;}).join(''):
+        `<div class="empty" style="padding:16px"><div class="empty-s">No matches queued</div></div>`}
+      </div>
+    </div>
+  </div>`;
+}
+function getFinalist(){const t=S.tournament;if(!t||!t.crossover)return null;const f=t.crossover.stages.find(s=>s.name==='Final');if(!f)return null;const fm=f.matches[0];if(!fm||fm.status!=='finished')return null;return fmtPair(fm.winner?.pair,t);}
+
+// ═══════════════════════════════════════════════════════════
+//  END TOURNAMENT MODAL
+// ═══════════════════════════════════════════════════════════
+function renderEndModal(){
+  const t=S.tournament;const finalist=getFinalist();
+  return`<div class="overlay" onclick="S.endModal=false;render()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-title">🏁 End Tournament</div>
+      <div style="background:rgba(240,85,85,.08);border:1px solid rgba(240,85,85,.3);border-radius:var(--rs);padding:13px;margin-bottom:16px;font-size:13px">
+        End <strong>${t?.name}</strong>? All standings and scores will be saved to Google Sheets.
+      </div>
+      ${finalist?`<div class="end-banner" style="margin-bottom:14px;text-align:center">
+        <div style="font-size:10px;color:var(--accent);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">🏆 Champion</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:900;color:var(--accent2)">${finalist}</div>
+      </div>`:''}
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-out" onclick="S.endModal=false;render()">Cancel</button>
+        <button class="btn btn-r" onclick="doEndTournament()">End & Save</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function doEndTournament(){
+  await syncStandings();await syncCrossover();await syncEndTournament();
+  S.endModal=false;S.tournament.ended=true;S.tournament=null;
+  S.courts=[];S.numCourts=0;S.courtsSetup=false;S.matchQueue=[];
+  render();toast('Tournament ended!','ok');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SUPER ADMIN
+// ═══════════════════════════════════════════════════════════
+function renderSuperAdmin(){
+  const t=S._saTab||'users';
+  return`<div>
+    <div class="tabs">
+      <div class="tab${t==='users'?' active':''}" onclick="S._saTab='users';render()">User Management</div>
+      <div class="tab${t==='history'?' active':''}" onclick="S._saTab='history';render()">Tournament History</div>
+      <div class="tab${t==='sheets'?' active':''}" onclick="S._saTab='sheets';render()">Sheets Integration</div>
+    </div>
+    ${t==='users'?renderUserMgmt():''}
+    ${t==='history'?renderHistory():''}
+    ${t==='sheets'?renderSheetsAdmin():''}
+  </div>`;
+}
+function renderUserMgmt(){
+  return`<div>
+    <div class="fbetween" style="margin-bottom:14px">
+      <div class="title" style="font-size:20px">Users</div>
+      <button class="btn btn-y btn-sm" onclick="openAddUser()">+ Add User</button>
+    </div>
+    <div class="card">
+      <table class="htbl">
+        <thead><tr><th>#</th><th>Name</th><th>Username</th><th>Password</th><th>Role</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${S.users.map((u,i)=>`<tr>
+            <td style="color:var(--text3)">${i+1}</td>
+            <td style="font-weight:600">${u.name}</td>
+            <td style="font-family:monospace;font-size:11px;color:var(--text3)">${u.username}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:5px">
+                <span id="pw-${u.id}" style="font-family:monospace;font-size:11px;color:var(--text3)">••••••••</span>
+                <button class="btn btn-out btn-xs" onclick="toggleUserPw(${u.id})">👁</button>
+              </div>
+            </td>
+            <td><span class="badge ${u.role==='admin'?'bg-y':u.role==='scorer'?'bg-b':u.role==='superadmin'?'bg-r':'bg-n'}">${u.role}</span></td>
+            <td><div style="display:flex;gap:5px">
+              <button class="btn btn-out btn-xs" onclick="editUser(${u.id})">Edit</button>
+              ${u.id!==S.user.id?`<button class="btn btn-r btn-xs" onclick="deleteUser(${u.id})">Delete</button>`:''}
+            </div></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+function toggleUserPw(uid){
+  const el=document.getElementById(`pw-${uid}`);if(!el)return;
+  const u=S.users.find(x=>x.id===uid);if(!u)return;
+  el.textContent=el.textContent==='••••••••'?u.password:'••••••••';
+}
+function renderHistory(){
+  const h=S.history;
+  return`<div>
+    <div class="fbetween" style="margin-bottom:14px">
+      <div class="title" style="font-size:20px">Tournament History</div>
+      <button class="btn btn-out btn-sm" onclick="loadHistory().then(render)">↻ Refresh</button>
+    </div>
+    ${!h.length?`<div class="empty"><div class="empty-i">📜</div><div class="empty-t">No history yet</div><div class="empty-s">Ended tournaments appear here</div></div>`:
+    `<div class="card"><table class="htbl">
+      <thead><tr><th>#</th><th>Tournament</th><th>Category</th><th>Players</th><th>Champion</th><th>Runner-Up</th><th>Matches</th><th>Date</th></tr></thead>
+      <tbody>${h.map((r,i)=>`<tr>
+        <td style="color:var(--text3)">${i+1}</td>
+        <td style="font-weight:700">${r.name}</td>
+        <td><span class="badge bg-y">${r.category}</span></td>
+        <td>${r.totalPlayers}</td>
+        <td style="color:var(--accent2);font-weight:700">${r.champion||'—'}</td>
+        <td style="color:var(--text2)">${r.runnerUp||'—'}</td>
+        <td>${r.totalMatches}</td>
+        <td style="font-size:11px;color:var(--text3)">${r.endedAt?new Date(r.endedAt).toLocaleDateString():''}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`}
+  </div>`;
+}
+function renderSheetsAdmin(){
+  const st=S.sheetsStatus;const sc={off:'var(--text3)',ok:'var(--accent2)',err:'var(--danger)',syncing:'var(--accent)'};
+  return`<div>
+    <div class="title" style="font-size:20px;margin-bottom:4px">Sheets Integration</div>
+    <div class="sub" style="margin-bottom:18px">Apps Script URL is embedded. Only Super Admin can test and manage sync.</div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="fbetween" style="margin-bottom:12px">
+        <div style="font-weight:700">Connection Status</div>
+        <span class="badge" style="color:${sc[st]};background:${sc[st]}22;border:1px solid ${sc[st]}44">${st==='ok'?'● Connected':st==='err'?'● Error':st==='syncing'?'◌ Syncing':'○ Untested'}</span>
+      </div>
+      <div style="background:var(--surface3);border-radius:var(--rs);padding:9px 13px;margin-bottom:12px;font-family:monospace;font-size:10px;color:var(--accent3);word-break:break-all">${S.sheetsUrl}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-b" onclick="testSheets()">Test Connection</button>
+        <button class="btn btn-out" onclick="manualSync()">Manual Full Sync</button>
+        <button class="btn btn-out" onclick="loadHistory().then(render)">Reload History</button>
+      </div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:12px">Sync Events</div>
+      <div class="g2">
+        ${[{i:'⚙️',t:'Setup',d:'On bracket generation — saves all players and pairs'},
+           {i:'🏸',t:'Match Scores',d:'After each match ends — appends one row per match'},
+           {i:'📊',t:'Standings',d:'On tournament end — saves final rankings'},
+           {i:'🏆',t:'Crossover',d:'After each crossover match and on tournament end'}].map(x=>`
+          <div class="panel" style="margin-bottom:0">
+            <div style="font-size:18px;margin-bottom:5px">${x.i}</div>
+            <div style="font-weight:700;font-size:13px">${x.t}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px">${x.d}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+function openAddUser(){S.userModal={id:null,username:'',password:'',name:'',role:'admin'};render();}
+function editUser(id){const u=S.users.find(x=>x.id===id);S.userModal={...u,origId:id};render();}
+function deleteUser(id){S.users=S.users.filter(x=>x.id!==id);render();toast('User deleted');}
+function renderUserModal(){
+  const m=S.userModal;
+  return`<div class="overlay" onclick="closeUM(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-title">${m.origId?'Edit User':'Add User'}</div>
+      <div style="margin-bottom:10px"><label class="label">Name</label><input class="inp" id="um-n" value="${m.name||''}"/></div>
+      <div style="margin-bottom:10px"><label class="label">Username</label><input class="inp" id="um-u" value="${m.username||''}"/></div>
+      <div style="margin-bottom:10px"><label class="label">Password</label>
+        <div class="pw-wrap">
+          <input class="inp" id="um-p" type="password" value="${m.password||''}"/>
+          <button class="pw-toggle" onclick="togglePwVis('um-p','um-eye')" tabindex="-1"><span id="um-eye">👁</span></button>
+        </div>
+      </div>
+      <div style="margin-bottom:16px"><label class="label">Role</label>
+        <select class="inp" id="um-r">${['admin','scorer','superadmin'].map(r=>`<option value="${r}"${m.role===r?' selected':''}>${r}</option>`).join('')}</select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-out" onclick="closeUM()">Cancel</button>
+        <button class="btn btn-y" onclick="saveUser()">Save</button>
+      </div>
+    </div>
+  </div>`;
+}
+function closeUM(e){if(!e||e.target.classList.contains('overlay')){S.userModal=null;render();}}
+function saveUser(){
+  const n=document.getElementById('um-n').value.trim();const u=document.getElementById('um-u').value.trim();
+  const p=document.getElementById('um-p').value;const r=document.getElementById('um-r').value;
+  if(!n||!u){toast('Fill all fields','er');return;}
+  const m=S.userModal;
+  if(m.origId){const idx=S.users.findIndex(x=>x.id===m.origId);S.users[idx]={...S.users[idx],name:n,username:u,role:r,...(p?{password:p}:{})};toast('Updated','ok');}
+  else{S.users.push({id:Date.now(),name:n,username:u,password:p||'pass123',role:r});toast('Added','ok');}
+  S.userModal=null;render();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SETUP PAGE
+// ═══════════════════════════════════════════════════════════
+function renderSetup(){
+  if(!S.tournament)return renderCreateTournament();
+  const t=S.tournament;
+  const step=t.levels.length===0?1:t.levels.some(l=>l.brackets.length===0)?2:3;
+  return`<div>
+    <div class="steps">
+      ${['Create Tournament','Add Levels & Players','Generate Brackets'].map((s,i)=>`
+        <div class="step"><div class="snum ${i+1<step?'done':i+1===step?'cur':''}">${i+1<step?'✓':i+1}</div><div class="slabel ${i+1===step?'cur':''}">${s}</div></div>${i<2?'<div class="ssep"></div>':''}
+      `).join('')}
+    </div>
+    <div class="fbetween" style="margin-bottom:16px">
+      <div><div class="title">${t.name}</div>
+        <div style="display:flex;gap:6px;margin-top:4px"><span class="badge bg-y">${t.category}</span><span class="badge bg-n">${t.levels.length} levels</span></div>
+      </div>
+      <button class="btn btn-out btn-sm" onclick="if(confirm('Reset?')){S.tournament=null;S.courts=[];S.numCourts=0;S.courtsSetup=false;S.matchQueue=[];render()}">Reset</button>
+    </div>
+    ${renderLevels()}
+  </div>`;
+}
+function renderCreateTournament(){
+  return`<div>
+    <div class="title" style="margin-bottom:4px">New Tournament</div>
+    <div class="sub" style="margin-bottom:18px">Set up your tournament details</div>
+    <div class="card" style="max-width:460px">
+      <div style="margin-bottom:10px"><label class="label">Tournament Name</label><input class="inp" id="t-name" placeholder="e.g. City Open 2025"/></div>
+      <div style="margin-bottom:10px"><label class="label">Category</label>
+        <div style="display:flex;gap:8px;margin-top:4px">${['Singles','Doubles'].map(c=>`<button class="btn ${S._tCat===c?'btn-y':'btn-out'}" onclick="S._tCat='${c}';render()">${c}</button>`).join('')}</div>
+      </div>
+      <div style="margin-bottom:16px"><label class="label">Number of Courts</label>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          ${[1,2,3,4,5,6].map(n=>`<button class="btn ${S._numCourts===n?'btn-y':'btn-out'}" onclick="S._numCourts=${n};render()" style="min-width:40px">${n}</button>`).join('')}
+        </div>
+        ${S._numCourts?`<div style="font-size:11px;color:var(--text2);margin-top:5px">${S._numCourts} court${S._numCourts!==1?'s':''} will be created with editable names</div>`:''}
+      </div>
+      <button class="btn btn-y" onclick="submitCreate()">Create Tournament →</button>
+    </div>
+  </div>`;
+}
+function submitCreate(){
+  const name=document.getElementById('t-name')?.value.trim();
+  if(!name){toast('Enter tournament name','er');return;}
+  if(!S._tCat){toast('Select category','er');return;}
+  const nc=S._numCourts||1;
+  S.tournament={id:gid(),name,category:S._tCat,levels:[],crossover:null,created:new Date().toISOString()};
+  initCourts(nc);
+  render();toast('Tournament created!','ok');
+}
+function renderLevels(){
+  const t=S.tournament;
+  return`<div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="fbetween" style="margin-bottom:12px">
+        <div style="font-weight:700;font-size:15px">Levels</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input class="inp inp-sm" id="new-lvl" placeholder="Level name…" style="width:180px"/>
+          <button class="btn btn-y btn-sm" onclick="addLevelInput()">+ Add</button>
+        </div>
+      </div>
+      ${!t.levels.length?`<div class="empty" style="padding:18px"><div class="empty-i">📊</div><div class="empty-t">No levels yet</div><div class="empty-s">Add Beginner, Intermediate, Advance…</div></div>`:''}
+      ${t.levels.map(l=>renderLevelCard(l)).join('')}
+    </div>
+    ${t.levels.length&&t.levels.every(l=>l.brackets.length)?`<div class="card" style="border-color:var(--accent2)">
+      <div class="fbetween">
+        <div><div style="font-weight:700;color:var(--accent2)">✓ Setup Complete</div><div style="font-size:12px;color:var(--text2)">All brackets generated!</div></div>
+        <button class="btn btn-g" onclick="ST('matches')">Go to Matches →</button>
+      </div>
+    </div>`:''}
+  </div>`;
+}
+function addLevelInput(){
+  const v=document.getElementById('new-lvl')?.value.trim();if(!v){toast('Enter level name','er');return;}
+  if(S.tournament.levels.find(l=>l.name.toLowerCase()===v.toLowerCase())){toast('Already exists','er');return;}
+  S.tournament.levels.push({id:gid(),name:v,brackets:[],players:[]});
+  render();document.getElementById('new-lvl')&&(document.getElementById('new-lvl').value='');
+}
+function renderLevelCard(lvl){
+  const isD=S.tournament.category==='Doubles';
+  return`<div class="panel" style="margin-bottom:9px">
+    <div class="fbetween" style="margin-bottom:9px">
+      <div style="font-weight:700;font-size:14px">${lvl.name}</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="badge bg-n">${lvl.players.length} players</span>
+        <span class="badge bg-b">${lvl.brackets.length} brackets</span>
+        <button class="btn btn-r btn-xs" onclick="delLevel('${lvl.id}')">✕</button>
+      </div>
+    </div>
+    <div class="frow">
+      <div class="fcol">
+        <label class="label">Add Players${isD?' (pairs randomized)':''}</label>
+        <textarea class="inp" id="pl-${lvl.id}" rows="3" placeholder="One name per line…"></textarea>
+      </div>
+      <div class="fcol" style="display:flex;flex-direction:column;justify-content:flex-end;gap:6px;max-width:110px">
+        <button class="btn btn-y btn-sm" onclick="addPlInput('${lvl.id}')">Add</button>
+        ${lvl.players.length?`<button class="btn btn-out btn-sm" onclick="clearPl('${lvl.id}')">Clear</button>`:''}
+      </div>
+    </div>
+    ${lvl.players.length?`<div class="tags" style="margin-bottom:9px">${lvl.players.map((p,i)=>`<span class="tag">${p}<button onclick="rmPl('${lvl.id}',${i})">×</button></span>`).join('')}</div>`:''}
+    ${lvl.players.length>=2?`<div class="frow" style="align-items:flex-end;margin-top:3px">
+      <div><label class="label">Brackets</label><input class="inp inp-sm" type="number" id="nbr-${lvl.id}" min="1" max="8" value="${lvl.brackets.length||1}" style="width:70px"/></div>
+      <button class="btn btn-g btn-sm" style="margin-left:8px" onclick="genBracketsBtn('${lvl.id}')">Generate</button>
+    </div>`:''}
+    ${lvl.brackets.length?`<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">${lvl.brackets.map(b=>`<span class="badge bg-g">✓ ${b.label} (${b.pairs.length} pairs)</span>`).join('')}</div>`:''}
+  </div>`;
+}
+function delLevel(id){S.tournament.levels=S.tournament.levels.filter(l=>l.id!==id);render();}
+function addPlInput(lvlId){const ta=document.getElementById(`pl-${lvlId}`);if(!ta)return;const lines=ta.value.split('\n').map(s=>s.trim()).filter(Boolean);const l=S.tournament.levels.find(x=>x.id===lvlId);if(l){l.players=[...l.players,...lines];l.brackets=[];}render();}
+function clearPl(lvlId){const l=S.tournament.levels.find(x=>x.id===lvlId);if(l){l.players=[];l.brackets=[];render();}}
+function rmPl(lvlId,idx){const l=S.tournament.levels.find(x=>x.id===lvlId);if(l){l.players.splice(idx,1);l.brackets=[];render();}}
+function genBracketsBtn(lvlId){
+  const lvl=S.tournament.levels.find(l=>l.id===lvlId);
+  if(!lvl||lvl.players.length<2){toast('Need at least 2 players','er');return;}
+  const n=parseInt(document.getElementById(`nbr-${lvlId}`)?.value)||1;
+  const cat=S.tournament.category;let pairs;
+  if(cat==='Singles'){pairs=shuffle(lvl.players).map(p=>[p]);}
+  else{const sh=shuffle(lvl.players);pairs=[];for(let i=0;i<sh.length-1;i+=2)pairs.push([sh[i],sh[i+1]]);if(sh.length%2)pairs.push([sh[sh.length-1],'TBD']);}
+  const perB=Math.ceil(pairs.length/n);lvl.brackets=[];
+  for(let b=0;b<n;b++){const bp=pairs.slice(b*perB,(b+1)*perB);const matches=genRR(bp);lvl.brackets.push({id:gid(),label:'Bracket '+String.fromCharCode(65+b),pairs:bp,matches,standings:computeStandings(bp,matches)});}
+  render();toast('Brackets generated!','ok');if(S.sheetsUrl.trim())setTimeout(syncSetup,400);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  COURTS PAGE — main badminton court layout
+// ═══════════════════════════════════════════════════════════
+function renderCourtsPage(){
+  const t=S.tournament;
+  if(!t||!S.courtsSetup)return`<div class="empty"><div class="empty-i">🏸</div><div class="empty-t">No tournament active</div></div>`;
+  const n=S.courts.length;
+  const gridClass=`courts-grid n${Math.min(n,6)}`;
+  return`<div>
+    <div class="fbetween" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="title">Courts</div>
+        <div class="sub">${t.name} — click court name to rename</div>
+      </div>
+      <div style="display:flex;gap:7px">
+        <button class="btn btn-out btn-sm" onclick="ST('matches')">← Brackets</button>
+        ${S.matchQueue.length?`<span class="badge bg-b" style="font-size:12px;padding:6px 12px">${S.matchQueue.length} in queue</span>`:''}
+      </div>
+    </div>
+
+    <!-- COURTS LAYOUT -->
+    <div class="${gridClass}" style="margin-bottom:20px">
+      ${S.courts.map(c=>renderCourtCard(c)).join('')}
+    </div>
+
+    <!-- GLOBAL QUEUE PANEL -->
+    ${renderQueuePanel()}
+
+    <!-- BRACKET SELECTOR for queuing -->
+    ${renderBracketSelector()}
+  </div>`;
+}
+
+function renderCourtCard(court){
+  const m=getCourtMatch(court);
+  const t=S.tournament;
+  const isEmpty=!m;
+  return`<div class="bmt-court${m?' active':' empty'}" id="court-${court.id}">
+    <!-- SVG court lines -->
+    <svg class="court-lines" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 300 240" preserveAspectRatio="none">
+      <!-- outer bounds -->
+      <rect x="10" y="10" width="280" height="220" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
+      <!-- service boxes -->
+      <line x1="10" y1="110" x2="290" y2="110" stroke="rgba(255,255,255,.18)" stroke-width="1.2"/>
+      <!-- side tramlines -->
+      <line x1="28" y1="10" x2="28" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+      <line x1="272" y1="10" x2="272" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+      <!-- short service lines -->
+      <line x1="10" y1="62" x2="290" y2="62" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+      <line x1="10" y1="178" x2="290" y2="178" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+      <!-- center line -->
+      <line x1="150" y1="62" x2="150" y2="178" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+      <!-- net -->
+      <rect x="8" y="106" width="284" height="8" fill="rgba(255,255,255,.25)" rx="2"/>
+      <line x1="8" y1="110" x2="292" y2="110" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/>
+    </svg>
+
+    <!-- Court name (editable) -->
+    <div class="court-name-wrap">
+      ${S.editingCourtId===court.id
+        ?`<input class="court-name-inp" id="cname-inp-${court.id}" value="${court.name}" onblur="saveCourtName('${court.id}')" onkeydown="if(event.key==='Enter')saveCourtName('${court.id}')" />`
+        :`<span class="court-name-display" onclick="startEditCourtName('${court.id}')">${court.name}</span>
+         <span class="court-edit-icon" onclick="startEditCourtName('${court.id}')">✎</span>`}
+    </div>
+
+    <!-- Court actions -->
+    <div class="court-actions">
+      ${m?`<button class="btn btn-r btn-xs" onclick="endCourtMatch('${court.id}')">End Match</button>
+           <button class="btn btn-o btn-xs" onclick="swapCourtSides('${court.id}')">↔ Change Court</button>`
+         :`<button class="btn btn-y btn-xs" onclick="assignNextFromQueue('${court.id}')">← Queue</button>`}
+    </div>
+
+    <!-- Players & Scores -->
+    <div class="court-content">
+      <div class="court-half top">
+        ${m?`<div class="court-player-name">${fmtPair(m.team1,t)}</div>
+             <div class="court-score-big">${court.liveScore.s1}</div>`
+          :`<div style="color:rgba(255,255,255,.25);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em">EMPTY</div>`}
+      </div>
+      <div class="court-net-area">
+        <div class="court-net-post-l"></div>
+        <div class="court-net-line"></div>
+        <div class="court-net-post-r"></div>
+      </div>
+      <div class="court-half bottom">
+        ${m?`<div class="court-score-big">${court.liveScore.s2}</div>
+             <div class="court-player-name">${fmtPair(m.team2,t)}</div>`
+          :`<div style="color:rgba(255,255,255,.15);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">Assign from queue</div>`}
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="court-status ${m?'live':'empty'}">${m?'● LIVE':'Available'}</div>
+  </div>`;
+}
+
+function startEditCourtName(cid){S.editingCourtId=cid;render();setTimeout(()=>{const inp=document.getElementById(`cname-inp-${cid}`);if(inp){inp.focus();inp.select();}},50);}
+function saveCourtName(cid){
+  const inp=document.getElementById(`cname-inp-${cid}`);
+  const c=S.courts.find(x=>x.id===cid);
+  if(c&&inp)c.name=inp.value.trim()||c.name;
+  S.editingCourtId=null;render();
+}
+
+function renderQueuePanel(){
+  const t=S.tournament;
+  return`<div class="queue-panel">
+    <div class="fbetween" style="margin-bottom:10px">
+      <div style="font-weight:700;font-size:15px">Match Queue</div>
+      <span class="badge bg-b">${S.matchQueue.length} matches</span>
+    </div>
+    ${!S.matchQueue.length?`<div style="color:var(--text3);font-size:12px;text-align:center;padding:12px 0">No matches in queue. Select matches from the brackets below.</div>`:
+      S.matchQueue.map((q,i)=>{
+        const m=getBrMatch(q.bracketId,q.matchId);const{br}=getLvlAndBr(q.bracketId);if(!m)return'';
+        const availCourts=S.courts.filter(c=>!c.matchId);
+        return`<div class="queue-row" draggable="true"
+          ondragstart="S.dragSrc='q:${q.matchId}'"
+          ondragover="event.preventDefault()"
+          ondrop="dropQueue('${q.matchId}')">
+          <div class="queue-num">${i+1}</div>
+          <div class="queue-match-info">
+            <div class="queue-match-teams">${fmtPair(m.team1,t)} <span style="color:var(--text3)">vs</span> ${fmtPair(m.team2,t)}</div>
+            <div class="queue-match-meta">${br?.label||''} · Round ${m.round||''}</div>
+          </div>
+          <div class="queue-assign">
+            ${availCourts.length?`<select class="inp inp-sm" id="qcourt-${q.matchId}" style="width:110px">
+              <option value="">Assign court…</option>
+              ${availCourts.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+            </select>
+            <button class="btn btn-y btn-xs" onclick="assignQueuedToCourt('${q.matchId}','${q.bracketId}','${q.levelId}')">Go</button>`:''}
+            <button class="btn btn-out btn-xs" onclick="removeFromQueue('${q.matchId}')">✕</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+function dropQueue(targetId){
+  if(!S.dragSrc||!S.dragSrc.startsWith('q:'))return;
+  const srcId=S.dragSrc.slice(2);if(srcId===targetId)return;
+  const ia=S.matchQueue.findIndex(q=>q.matchId===srcId);
+  const ib=S.matchQueue.findIndex(q=>q.matchId===targetId);
+  if(ia>-1&&ib>-1)[S.matchQueue[ia],S.matchQueue[ib]]=[S.matchQueue[ib],S.matchQueue[ia]];
+  S.dragSrc=null;render();
+}
+
+function assignQueuedToCourt(mId,brId,lvlId){
+  const sel=document.getElementById(`qcourt-${mId}`);
+  const cid=sel?.value;if(!cid){toast('Select a court','er');return;}
+  assignToCourt(cid,mId,brId,lvlId);
+}
+function removeFromQueue(mId){S.matchQueue=S.matchQueue.filter(q=>q.matchId!==mId);render();}
+
+function renderBracketSelector(){
+  const t=S.tournament;
+  return`<div class="card">
+    <div class="fbetween" style="margin-bottom:12px">
+      <div style="font-weight:700;font-size:15px">Brackets — Add to Queue</div>
+    </div>
+    ${t.levels.map(lvl=>`<div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px">${lvl.name}</div>
+      <div class="brkt-grid">
+        ${lvl.brackets.map(br=>{
+          const done=br.matches.filter(m=>m.status==='finished').length;
+          const tot=br.matches.length;
+          return`<div class="brkt-btn${S.selectedLvl===lvl.id&&S.selectedBr===br.id?' sel':''}" onclick="selBr('${lvl.id}','${br.id}')">
+            <div class="brkt-letter">${br.label.replace('Bracket ','')}</div>
+            <div class="brkt-label">${br.label}</div>
+            <div class="brkt-meta">${done}/${tot} done</div>
+            ${done===tot&&tot>0?'<div style="margin-top:5px"><span class="badge bg-g" style="font-size:8px">Complete</span></div>':''}
+          </div>`;
+        }).join('')}
+      </div>
+      ${S.selectedLvl===lvl.id&&S.selectedBr?renderBrMatchList(S.selectedBr,lvl.id):''}
+    </div>`).join('')}
+  </div>`;
+}
+
+function selBr(lvlId,brId){
+  if(S.selectedLvl===lvlId&&S.selectedBr===brId){S.selectedLvl=null;S.selectedBr=null;}
+  else{S.selectedLvl=lvlId;S.selectedBr=brId;}render();
+}
+
+function renderBrMatchList(brId,lvlId){
+  const{lvl,br}=getLvlAndBr(brId);if(!br)return'';
+  const t=S.tournament;
+  return`<div style="margin-top:10px">
+    <div class="g2">
+      <div>
+        <div class="label" style="margin-bottom:6px">Matches <span style="color:var(--text3);font-weight:400;font-size:9px">(drag to reorder)</span></div>
+        <div class="scroll">
+          ${br.matches.map((m,i)=>{
+            const isCurCourt=S.courts.some(c=>c.matchId===m.id);
+            const qPos=S.matchQueue.findIndex(q=>q.matchId===m.id);
+            const isQ=qPos>-1;
+            let cls='mc';if(m.status==='finished')cls+=' done';else if(isCurCourt)cls+=' cur';else if(isQ)cls+=' queued';
+            return`<div class="${cls}" draggable="true"
+              ondragstart="S.dragSrc='{\"mId\":\"${m.id}\",\"brId\":\"${brId}\"}'"
+              ondragover="event.preventDefault()" ondrop="doDrop('${m.id}','${brId}')">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div style="flex:1;min-width:0">
+                  <div class="mc-team" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtPair(m.team1,t)}</div>
+                  <div class="mc-vs">VS</div>
+                  <div class="mc-team" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtPair(m.team2,t)}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;margin-left:7px">
+                  ${m.status==='finished'?`<div class="mc-score">${m.score1}—${m.score2}</div><span class="badge bg-g" style="font-size:8px">Done</span>`:
+                    isCurCourt?`<span class="badge bg-g">● On Court</span>`:
+                    isQ?`<span class="badge bg-b">Q${qPos+1}</span>`:
+                    `<span class="badge bg-n">R${m.round||i+1}</span>`}
+                </div>
+              </div>
+              ${m.status==='pending'&&!isCurCourt&&!isQ?`<div style="margin-top:7px">
+                <button class="btn btn-b btn-xs btn-full" onclick="queueM('${m.id}','${brId}','${lvlId}')">+ Add to Queue</button>
+              </div>`:''}
+              ${m.status==='pending'&&!isCurCourt&&isQ?`<div style="margin-top:7px">
+                <button class="btn btn-out btn-xs" onclick="removeFromQueue('${m.id}')">Remove from Queue</button>
+              </div>`:''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div>
+        <div class="label" style="margin-bottom:6px">Standings</div>
+        ${renderStandings(br.standings)}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MATCHES PAGE (Round Robin + Crossover)
+// ═══════════════════════════════════════════════════════════
+function renderMatches(){
+  const t=S.tournament;
+  if(!t||!t.levels.length||!t.levels[0].brackets.length)
+    return`<div class="empty"><div class="empty-i">🏸</div><div class="empty-t">No brackets yet</div><button class="btn btn-y" style="margin-top:12px" onclick="ST('tournament-setup')">Setup</button></div>`;
+  return`<div>
+    <div class="tabs">
+      <div class="tab${S.matchTab!=='xo'?' active':''}" onclick="S.matchTab='rr';render()">Round Robin</div>
+      <div class="tab${S.matchTab==='xo'?' active':''}" onclick="S.matchTab='xo';render()">Crossover</div>
+    </div>
+    ${S.matchTab==='xo'?renderXO():renderRRPage()}
+  </div>`;
+}
+function renderRRPage(){
+  const t=S.tournament;
+  return`<div>
+    ${t.levels.map(lvl=>`<div style="margin-bottom:22px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;margin-bottom:9px">${lvl.name}</div>
+      <div class="brkt-grid">
+        ${lvl.brackets.map(br=>{const done=br.matches.filter(m=>m.status==='finished').length;const tot=br.matches.length;
+          return`<div class="brkt-btn${S.selectedLvl===lvl.id&&S.selectedBr===br.id?' sel':''}" onclick="selBr('${lvl.id}','${br.id}')">
+            <div class="brkt-letter">${br.label.replace('Bracket ','')}</div>
+            <div class="brkt-label">${br.label}</div>
+            <div class="brkt-meta">${br.pairs.length} pairs · ${done}/${tot}</div>
+            ${done===tot&&tot>0?'<div style="margin-top:5px"><span class="badge bg-g">Complete</span></div>':''}
+          </div>`;}).join('')}
+      </div>
+    </div>`).join('')}
+    ${S.selectedLvl&&S.selectedBr?renderBrDetail():''}
+    ${allBrDone()?`<div class="card" style="border-color:var(--accent2);margin-top:12px">
+      <div class="fbetween">
+        <div><div style="font-weight:700;color:var(--accent2)">All Round Robin Complete!</div><div style="font-size:12px;color:var(--text2)">Ready for crossover.</div></div>
+        <button class="btn btn-g" onclick="initCrossover();S.matchTab='xo';render()">Crossover →</button>
+      </div>
+    </div>`:''}
+  </div>`;
+}
+function renderBrDetail(){
+  const{lvl,br}=getLvlAndBr(S.selectedBr);if(!br)return'';
+  const t=S.tournament;
+  return`<div class="card" style="margin-top:12px">
+    <div class="fbetween" style="margin-bottom:12px">
+      <div style="font-weight:700;font-size:16px">${br.label} — ${lvl?.name}</div>
+      <div style="display:flex;gap:6px">
+        <span class="badge bg-n">${br.matches.filter(m=>m.status==='pending').length} pending</span>
+        <span class="badge bg-g">${br.matches.filter(m=>m.status==='finished').length} done</span>
+      </div>
+    </div>
+    <div class="g2" style="gap:16px">
+      <div>
+        <div class="label" style="margin-bottom:6px">Matches <span style="color:var(--text3);font-size:9px;font-weight:400">(drag to reorder)</span></div>
+        <div class="scroll">
+          ${br.matches.map((m,i)=>{
+            const isCurCourt=S.courts.some(c=>c.matchId===m.id);
+            const qPos=S.matchQueue.findIndex(q=>q.matchId===m.id);
+            const isQ=qPos>-1;
+            let cls='mc';if(m.status==='finished')cls+=' done';else if(isCurCourt)cls+=' cur';else if(isQ)cls+=' queued';
+            return`<div class="${cls}" draggable="true"
+              ondragstart="S.dragSrc='{\"mId\":\"${m.id}\",\"brId\":\"${br.id}\"}'"
+              ondragover="event.preventDefault()" ondrop="doDrop('${m.id}','${br.id}')">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div style="flex:1;min-width:0">
+                  <div class="mc-team" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtPair(m.team1,t)}</div>
+                  <div class="mc-vs">VS</div>
+                  <div class="mc-team" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtPair(m.team2,t)}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;margin-left:7px">
+                  ${m.status==='finished'?`<div class="mc-score">${m.score1}—${m.score2}</div><span class="badge bg-g" style="font-size:8px">Done</span>`:
+                    isCurCourt?`<span class="badge bg-g">● On Court</span>`:
+                    isQ?`<span class="badge bg-b">Q${qPos+1}</span>`:
+                    `<span class="badge bg-n">R${m.round||i+1}</span>`}
+                </div>
+              </div>
+              ${m.status==='pending'&&!isCurCourt?`<div style="display:flex;gap:5px;margin-top:7px">
+                ${!isQ?`<button class="btn btn-b btn-xs" onclick="queueM('${m.id}','${br.id}','${lvl?.id}')">+ Queue</button>`:
+                       `<button class="btn btn-out btn-xs" onclick="removeFromQueue('${m.id}')">Dequeue</button>`}
+              </div>`:''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div>
+        <div class="label" style="margin-bottom:6px">Standings</div>
+        ${renderStandings(br.standings)}
+      </div>
+    </div>
+  </div>`;
+}
+function doDrop(targetId,brId){
+  if(!S.dragSrc)return;let src;try{src=JSON.parse(S.dragSrc);}catch{S.dragSrc=null;return;}
+  if(src.mId===targetId||src.brId!==brId){S.dragSrc=null;return;}
+  for(const l of S.tournament.levels)for(const b of l.brackets)if(b.id===brId){
+    const ia=b.matches.findIndex(m=>m.id===src.mId);const ib=b.matches.findIndex(m=>m.id===targetId);
+    if(ia>-1&&ib>-1)[b.matches[ia],b.matches[ib]]=[b.matches[ib],b.matches[ia]];
+  }
+  S.dragSrc=null;render();toast('Order updated');
+}
+function queueM(mId,brId,lvlId){if(S.matchQueue.find(q=>q.matchId===mId)){toast('Already queued');return;}S.matchQueue.push({matchId:mId,bracketId:brId,levelId:lvlId});toast('Added to queue','ok');render();}
+
+// ═══════════════════════════════════════════════════════════
+//  SCORE MODAL (admin — opens on court end)
+// ═══════════════════════════════════════════════════════════
+function renderScoreModal(){
+  const sm=S.scoreModal;
+  const m=getBrMatch(sm.brId||sm.bracketId,sm.mId||sm.matchId);if(!m)return'';
+  const t=S.tournament;
+  return`<div class="overlay" onclick="S.scoreModal=null;render()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-title">Confirm Final Score</div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:16px">
+        <div class="sib active-side">
+          <div class="label">${fmtPair(m.team1,t)}</div>
+          <div class="sid" onclick="S.scoreModal.s1++;render()">${sm.s1}</div>
+          <div style="display:flex;justify-content:center;gap:7px;margin-top:10px">
+            <button class="sbtn" onclick="S.scoreModal.s1=Math.max(0,S.scoreModal.s1-1);render()">−</button>
+            <button class="sbtn" onclick="S.scoreModal.s1++;render()">+</button>
+          </div>
+        </div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;color:var(--text3)">VS</div>
+        <div class="sib">
+          <div class="label">${fmtPair(m.team2,t)}</div>
+          <div class="sid" onclick="S.scoreModal.s2++;render()">${sm.s2}</div>
+          <div style="display:flex;justify-content:center;gap:7px;margin-top:10px">
+            <button class="sbtn" onclick="S.scoreModal.s2=Math.max(0,S.scoreModal.s2-1);render()">−</button>
+            <button class="sbtn" onclick="S.scoreModal.s2++;render()">+</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-out" onclick="S.scoreModal=null;render()">Cancel</button>
+        <button class="btn btn-g" onclick="submitScore()">Save & End Match</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function submitScore(){
+  const sm=S.scoreModal;
+  const brId=sm.brId||sm.bracketId;const mId=sm.mId||sm.matchId;
+  const m=getBrMatch(brId,mId);const{lvl,br}=getLvlAndBr(brId);if(!m)return;
+  m.score1=sm.s1;m.score2=sm.s2;m.status='finished';refreshStandings();
+  // Free the court
+  if(sm.courtId){const c=S.courts.find(x=>x.id===sm.courtId);if(c){c.matchId=null;c.bracketId=null;c.levelId=null;c.liveScore={s1:0,s2:0};}}
+  // Auto-assign next from queue to freed court
+  const freed=S.courts.find(c=>!c.matchId&&sm.courtId===c.id);
+  if(freed&&S.matchQueue.length){const next=S.matchQueue[0];S.matchQueue.shift();assignToCourtDirect(freed.id,next.matchId,next.bracketId,next.levelId);}
+  S.scoreModal=null;render();toast('Score saved!','ok');
+  if(S.sheetsUrl.trim())syncMatchScore(m,lvl?.name,br?.label,false);
+}
+function assignToCourtDirect(cid,mId,brId,lvlId){
+  const c=S.courts.find(x=>x.id===cid);if(!c)return;
+  c.matchId=mId;c.bracketId=brId;c.levelId=lvlId;c.liveScore={s1:0,s2:0};
+}
+function openScore(mId,brId,lvlId){S.scoreModal={mId,brId,lvlId,s1:0,s2:0};render();}
+
+// ═══════════════════════════════════════════════════════════
+//  STANDINGS
+// ═══════════════════════════════════════════════════════════
+function renderStandings(standings){
+  if(!standings||!standings.length)return`<div class="empty" style="padding:12px;font-size:12px">No matches played</div>`;
+  return`<table class="stbl">
+    <thead><tr><th>#</th><th>Pair</th><th>W</th><th>L</th><th>Pts</th></tr></thead>
+    <tbody>${standings.map((s,i)=>`<tr>
+      <td style="color:${i===0?'var(--accent)':i===1?'var(--text)':'var(--text3)'};font-weight:700">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>
+      <td style="font-weight:${i<2?700:400};font-size:11px">${fmtPair(s.pair,S.tournament)}</td>
+      <td style="color:var(--accent2)">${s.W}</td><td style="color:var(--danger)">${s.L}</td>
+      <td style="font-weight:700">${s.pts}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CROSSOVER
+// ═══════════════════════════════════════════════════════════
+function renderXO(){
+  const t=S.tournament;
+  if(!t||!t.crossover){
+    if(!allBrDone())return`<div class="empty"><div class="empty-i">🏆</div><div class="empty-t">Complete round robin first</div></div>`;
+    return`<div class="card" style="text-align:center;padding:38px">
+      <div style="font-size:36px;margin-bottom:9px">🏆</div>
+      <div style="font-size:20px;font-weight:700;margin-bottom:5px">Ready for Crossover!</div>
+      <div class="sub" style="margin-bottom:16px">All round robin complete.</div>
+      <button class="btn btn-y btn-lg" onclick="initCrossover()">Generate Crossover Bracket</button>
+    </div>`;
+  }
+  return`<div>
+    <div class="fbetween" style="margin-bottom:16px">
+      <div class="title">Crossover Bracket</div>
+      <button class="btn btn-out btn-sm" onclick="initCrossover()">↻ Regenerate</button>
+    </div>
+    ${renderBViz()}
+  </div>`;
+}
+function renderBViz(){
+  const t=S.tournament;if(!t||!t.crossover)return'';
+  return`<div style="overflow-x:auto"><div style="display:flex;gap:26px;min-width:max-content;padding:5px">
+    ${t.crossover.stages.map((st,si)=>`<div class="bv-stage">
+      <div class="bv-title">${st.name}</div>
+      ${st.matches.map((m,mi)=>`<div class="bv-box">
+        ${renderBVTeam(m.t1,m,true)}${renderBVTeam(m.t2,m,false)}
+        ${m.status==='pending'&&m.t1&&m.t2?`<div style="padding:6px;border-top:1px solid var(--border)">
+          <button class="btn btn-y btn-xs btn-full" onclick="S.crossScoreModal={si:${si},mi:${mi},s1:0,s2:0};render()">Score</button>
+        </div>`:m.status==='finished'?`<div style="padding:5px 10px;border-top:1px solid var(--border)"><span class="badge bg-g" style="font-size:8px">Done</span></div>`:''}
+      </div>`).join('')}
+    </div>`).join('')}
+  </div></div>`;
+}
+function renderBVTeam(team,match,isT1){
+  if(!team)return`<div class="bv-team bye">— TBD</div>`;
+  const isW=match.winner&&JSON.stringify(match.winner.pair)===JSON.stringify(team.pair);
+  const score=isT1?match.score1:match.score2;
+  return`<div class="bv-team${isW?' win':''}${match.status==='bye'&&!isT1?' bye':''}">
+    <span style="font-size:11px">${fmtPair(team.pair,S.tournament)}${team.from?` <span style="font-size:9px;color:var(--text3)">(${team.from})</span>`:''}${match.status==='bye'&&isT1?' <span class="badge bg-b" style="margin-left:3px;font-size:8px">BYE</span>':''}</span>
+    ${score!==null&&score!==undefined?`<span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;color:${isW?'var(--accent2)':'var(--text)'}">${score}</span>`:''}
+  </div>`;
+}
+function renderCrossScoreModal(){
+  const cs=S.crossScoreModal;const t=S.tournament;
+  const st=t.crossover.stages[cs.si];const m=st.matches[cs.mi];
+  return`<div class="overlay" onclick="S.crossScoreModal=null;render()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-title">${st.name}</div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:16px">
+        <div class="sib"><div class="label">${m.t1?fmtPair(m.t1.pair,t):'TBD'}</div>
+          <div class="sid" onclick="S.crossScoreModal.s1++;render()">${cs.s1}</div>
+          <div style="display:flex;justify-content:center;gap:7px;margin-top:10px">
+            <button class="sbtn" onclick="S.crossScoreModal.s1=Math.max(0,S.crossScoreModal.s1-1);render()">−</button>
+            <button class="sbtn" onclick="S.crossScoreModal.s1++;render()">+</button>
+          </div>
+        </div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;color:var(--text3)">VS</div>
+        <div class="sib"><div class="label">${m.t2?fmtPair(m.t2.pair,t):'TBD'}</div>
+          <div class="sid" onclick="S.crossScoreModal.s2++;render()">${cs.s2}</div>
+          <div style="display:flex;justify-content:center;gap:7px;margin-top:10px">
+            <button class="sbtn" onclick="S.crossScoreModal.s2=Math.max(0,S.crossScoreModal.s2-1);render()">−</button>
+            <button class="sbtn" onclick="S.crossScoreModal.s2++;render()">+</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-out" onclick="S.crossScoreModal=null;render()">Cancel</button>
+        <button class="btn btn-g" onclick="submitCrossScore()">Save & Advance</button>
+      </div>
+    </div>
+  </div>`;
+}
+async function submitCrossScore(){
+  const cs=S.crossScoreModal;const t=S.tournament;
+  const st=t.crossover.stages[cs.si];const m=st.matches[cs.mi];
+  m.score1=cs.s1;m.score2=cs.s2;const winner=cs.s1>cs.s2?m.t1:m.t2;
+  advanceCrossover(cs.si,cs.mi,winner);S.crossScoreModal=null;render();toast('Winner advanced!','ok');
+  if(S.sheetsUrl.trim()){syncMatchScore({team1:m.t1?.pair,team2:m.t2?.pair,score1:cs.s1,score2:cs.s2,winner:winner?.pair},'',st.name,true);syncCrossover();}
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SCORER VIEW — full scoreboard
+// ═══════════════════════════════════════════════════════════
+function renderScorer(){
+  const t=S.tournament;
+  if(!t)return`<div class="empty"><div class="empty-i">📋</div><div class="empty-t">No active tournament</div></div>`;
+  // If a court is selected for scoring, show the scoreboard
+  const selCourt=S.scorerCourtId?S.courts.find(c=>c.id===S.scorerCourtId):null;
+  if(selCourt&&selCourt.matchId){
+    return renderScorerBoard(selCourt);
+  }
+  // Otherwise show court picker
+  return`<div>
+    <div class="title" style="margin-bottom:4px">Scorer — Select Court</div>
+    <div class="sub" style="margin-bottom:18px">${t.name} · ${t.category}</div>
+    <div class="courts-grid ${`n${Math.min(S.courts.length,3)}`}" style="margin-bottom:20px">
+      ${S.courts.map(c=>{
+        const m=getCourtMatch(c);
+        return`<div class="bmt-court${m?' active':' empty'}" style="cursor:${m?'pointer':'default'}" onclick="${m?`S.scorerCourtId='${c.id}';render()`:''}">
+          <svg class="court-lines" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 300 240" preserveAspectRatio="none">
+            <rect x="10" y="10" width="280" height="220" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
+            <line x1="10" y1="110" x2="290" y2="110" stroke="rgba(255,255,255,.18)" stroke-width="1.2"/>
+            <line x1="28" y1="10" x2="28" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+            <line x1="272" y1="10" x2="272" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+            <rect x="8" y="106" width="284" height="8" fill="rgba(255,255,255,.25)" rx="2"/>
+          </svg>
+          <div class="court-name-wrap"><span class="court-name-display" style="cursor:default">${c.name}</span></div>
+          <div class="court-content">
+            <div class="court-half top">${m?`<div class="court-player-name">${fmtPair(m.team1,t)}</div><div class="court-score-big">${c.liveScore.s1}</div>`:`<div style="color:rgba(255,255,255,.2);font-size:12px">EMPTY</div>`}</div>
+            <div class="court-net-area"><div class="court-net-post-l"></div><div class="court-net-line"></div><div class="court-net-post-r"></div></div>
+            <div class="court-half bottom">${m?`<div class="court-score-big">${c.liveScore.s2}</div><div class="court-player-name">${fmtPair(m.team2,t)}</div>`:`<div style="color:rgba(255,255,255,.12);font-size:11px">No match</div>`}</div>
+          </div>
+          <div class="court-status ${m?'live':'empty'}">${m?'● TAP TO SCORE':'Waiting'}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    ${S.scoreModal?renderScoreModal():''}
+  </div>`;
+}
+
+function renderScorerBoard(court){
+  const m=getCourtMatch(court);const t=S.tournament;
+  if(!m)return`<div class="empty"><div class="empty-t">No match on this court</div><button class="btn btn-out btn-sm" style="margin-top:12px" onclick="S.scorerCourtId=null;render()">← Back</button></div>`;
+  return`<div>
+    <div class="fbetween" style="margin-bottom:14px">
+      <div>
+        <button class="btn btn-out btn-sm" onclick="S.scorerCourtId=null;render()">← All Courts</button>
+      </div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:var(--accent)">${court.name}</div>
+    </div>
+
+    <div class="scoreboard">
+      <div class="scoreboard-header">
+        <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Live Match</div>
+        <div style="display:flex;gap:7px">
+          <span class="badge bg-g">● Recording</span>
+        </div>
+      </div>
+      <div class="scoreboard-body">
+        <!-- LEFT SIDE — tap to add score -->
+        <div class="score-side" onclick="updateLiveScore('${court.id}',1,1)" title="Tap to add point">
+          <div class="tap-hint">Tap to score</div>
+          <div class="player-name">${fmtPair(m.team1,t)}</div>
+          <div class="big-score">${court.liveScore.s1}</div>
+          <div class="score-btns-row">
+            <button class="sbtn" onclick="event.stopPropagation();updateLiveScore('${court.id}',1,-1)">−</button>
+            <button class="sbtn" onclick="event.stopPropagation();updateLiveScore('${court.id}',1,1)">+</button>
+          </div>
+        </div>
+
+        <!-- CENTER DIVIDER -->
+        <div class="score-divider">
+          <div class="score-vs-text">VS</div>
+        </div>
+
+        <!-- RIGHT SIDE -->
+        <div class="score-side" onclick="updateLiveScore('${court.id}',2,1)" title="Tap to add point">
+          <div class="tap-hint">Tap to score</div>
+          <div class="player-name">${fmtPair(m.team2,t)}</div>
+          <div class="big-score">${court.liveScore.s2}</div>
+          <div class="score-btns-row">
+            <button class="sbtn" onclick="event.stopPropagation();updateLiveScore('${court.id}',2,-1)">−</button>
+            <button class="sbtn" onclick="event.stopPropagation();updateLiveScore('${court.id}',2,1)">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="scoreboard-footer">
+        <div style="font-size:12px;color:var(--text3)">${court.name} · Tap side or + button to score</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-o btn-sm" onclick="swapCourtSides('${court.id}')">↔ Change Court (Swap Sides)</button>
+          <button class="btn btn-r btn-sm" onclick="endCourtMatch('${court.id}')">🏁 End Match</button>
+        </div>
+      </div>
+    </div>
+    ${S.scoreModal?renderScoreModal():''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PUBLIC VIEW
+// ═══════════════════════════════════════════════════════════
+function renderPublic(){
+  const t=S.tournament;
+  if(!t||!t.levels.length)return`<div class="empty"><div class="empty-i">🏸</div><div class="empty-t">No tournament data</div></div>`;
+  refreshStandings();const pt=S.pubTab||'standings';
+  return`<div>
+    <div class="fbetween" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div><div class="title">${t.name}</div><span class="badge bg-y" style="margin-top:4px">${t.category}</span></div>
+      ${S.courts.some(c=>c.matchId)?`<span class="badge bg-g" style="font-size:11px;padding:5px 12px">● ${S.courts.filter(c=>c.matchId).length} Match${S.courts.filter(c=>c.matchId).length!==1?'es':''} Live</span>`:''}
+    </div>
+    <div class="tabs">
+      ${['courts','standings','matches','crossover'].map(tab=>`<div class="tab${pt===tab?' active':''}" onclick="S.pubTab='${tab}';render()">${tab.charAt(0).toUpperCase()+tab.slice(1)}</div>`).join('')}
+    </div>
+    ${pt==='courts'?renderPubCourts():''}
+    ${pt==='standings'?renderPubStandings():''}
+    ${pt==='matches'?renderPubMatches():''}
+    ${pt==='crossover'?renderPubCrossover():''}
+  </div>`;
+}
+function renderPubCourts(){
+  const t=S.tournament;
+  return`<div>
+    <div class="${`courts-grid n${Math.min(S.courts.length,3)}`}">
+      ${S.courts.map(c=>{const m=getCourtMatch(c);return`<div class="bmt-court${m?' active':' empty'}">
+        <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 300 240" preserveAspectRatio="none">
+          <rect x="10" y="10" width="280" height="220" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
+          <line x1="10" y1="110" x2="290" y2="110" stroke="rgba(255,255,255,.18)" stroke-width="1.2"/>
+          <line x1="28" y1="10" x2="28" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+          <line x1="272" y1="10" x2="272" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+          <rect x="8" y="106" width="284" height="8" fill="rgba(255,255,255,.25)" rx="2"/>
+        </svg>
+        <div class="court-name-wrap"><span class="court-name-display" style="cursor:default">${c.name}</span></div>
+        <div class="court-content">
+          <div class="court-half top">${m?`<div class="court-player-name">${fmtPair(m.team1,t)}</div><div class="court-score-big">${c.liveScore.s1}</div>`:`<div style="color:rgba(255,255,255,.2);font-size:12px">EMPTY</div>`}</div>
+          <div class="court-net-area"><div class="court-net-post-l"></div><div class="court-net-line"></div><div class="court-net-post-r"></div></div>
+          <div class="court-half bottom">${m?`<div class="court-score-big">${c.liveScore.s2}</div><div class="court-player-name">${fmtPair(m.team2,t)}</div>`:`<div style="color:rgba(255,255,255,.12);font-size:11px">Waiting</div>`}</div>
+        </div>
+        <div class="court-status ${m?'live':'empty'}">${m?'● LIVE':'—'}</div>
+      </div>`;}).join('')}
+    </div>
+  </div>`;
+}
+function renderPubStandings(){
+  const t=S.tournament;
+  return t.levels.map(lvl=>`<div style="margin-bottom:20px">
+    <div style="font-weight:700;font-size:18px;margin-bottom:9px">${lvl.name}</div>
+    <div class="g3">${lvl.brackets.map(br=>`<div class="card"><div style="font-weight:700;margin-bottom:9px;color:var(--accent)">${br.label}</div>${renderStandings(br.standings)}</div>`).join('')}</div>
+  </div>`).join('');
+}
+function renderPubMatches(){
+  const t=S.tournament;
+  return`<div>${t.levels.map(lvl=>`<div style="margin-bottom:18px">
+    <div style="font-weight:700;font-size:17px;margin-bottom:9px">${lvl.name}</div>
+    ${lvl.brackets.map(br=>`<div class="card" style="margin-bottom:9px">
+      <div style="font-weight:600;margin-bottom:7px">${br.label}</div>
+      ${br.matches.map(m=>`<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px">
+        <span>${fmtPair(m.team1,t)} <span style="color:var(--text3)">vs</span> ${fmtPair(m.team2,t)}</span>
+        ${m.status==='finished'?`<span style="font-weight:700;font-family:'Barlow Condensed',sans-serif;font-size:16px;color:var(--accent)">${m.score1}—${m.score2}</span>`:
+          S.courts.some(c=>c.matchId===m.id)?`<span class="badge bg-g">● Live</span>`:`<span class="badge bg-n">Pending</span>`}
+      </div>`).join('')}
+    </div>`).join('')}
+  </div>`).join('')}</div>`;
+}
+function renderPubCrossover(){
+  if(!S.tournament?.crossover)return`<div class="empty"><div class="empty-i">🏆</div><div class="empty-t">Crossover not started</div></div>`;
+  return renderBViz();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+S._loginRole='admin';S._numCourts=2;
+render();
+</script>
+</body>
+</html>
