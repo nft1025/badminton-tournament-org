@@ -335,7 +335,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 // ═══════════════════════════════════════════════════════════
 
 // ── GOOGLE SHEETS (Apps Script) — for Excel recording ────
-const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzdnFUHUwp3tEacOem6QF7uEk4GSXMEJYjiPArJMRkAEov-aKyhCdSbY9FyPsa7lHKF-Q/exec';
+const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbwwSWC8wopu6zQvUTI2JkJLx4CaWVOlLjgmOQeF6nFfZb9fN0WC8hPt61XVZg_2OxoQSA/exec';
 
 // ── FIREBASE — paste your project values here ─────────────
 // Find them: Firebase Console → Project Settings → Your Apps → SDK setup (Config)
@@ -614,14 +614,16 @@ function fbSubscribeTournament(tid){
           id:d.id||tid, name:d.name, category:d.category, created:d.created,
           levels:JSON.parse(d.levels||'[]'),
           crossover:d.crossover?JSON.parse(d.crossover):null,
-          ended:d.ended||false
+          ended:d.ended||false,
+          createdBy:d.createdBy||'',
+          allowedScorers:d.allowedScorers||[]
         };
-        // Admin: only update levels/crossover (don't overwrite local courts/queue)
         if(S.role==='admin'||S.role==='superadmin'){
           if(S.tournament){
             S.tournament.levels=updated.levels;
             S.tournament.crossover=updated.crossover;
             S.tournament.ended=updated.ended;
+            S.tournament.allowedScorers=updated.allowedScorers;
           }
         } else {
           // Scorer/public: full replace
@@ -633,6 +635,8 @@ function fbSubscribeTournament(tid){
               S.courts.push({id:'c'+(i+1),name:'Court '+(i+1),matchId:null,bracketId:null,levelId:null,liveScore:{s1:0,s2:0}});
           }
           S.courtsSetup=true;
+          // If scorer just got access revoked/granted, re-render immediately
+          if(S.role==='scorer') render();
         }
         render();
       }catch(e){ console.warn('fbSubscribeTournament parse:',e.message); }
@@ -761,15 +765,19 @@ async function fbLoadActiveTournament(){
     const own=list.filter(t=>!t.createdBy||t.createdBy===S.user?.username);
     pool=own.length?own:list;
   } else if(S.role==='scorer'){
-    // Scorer sees tournaments where they are explicitly allowed OR createdBy matches
-    const accessible=list.filter(t=>
-      !t.createdBy ||                                           // old tournament no ownership
-      t.createdBy===S.user?.username ||                        // scorer IS the admin (edge case)
-      (t.allowedScorers&&t.allowedScorers.includes(S.user?.username)) // explicitly granted
-    );
+    // Scorer sees tournaments where they are explicitly allowed
+    const accessible=list.filter(t=>{
+      // If Firebase is active, enforce strict access control
+      if(DB&&t.createdBy){
+        const allowed=t.allowedScorers||[];
+        return allowed.includes(S.user?.username);
+      }
+      // Firebase not configured OR tournament has no ownership (local/legacy) — allow all
+      return true;
+    });
     pool=accessible.length?accessible:[];
     if(!pool.length){
-      toast('No tournaments assigned to your scorer account yet. Ask an admin to grant you access.','inf');
+      toast('No tournaments assigned to your scorer account. Ask an admin to grant you access.','inf');
       return false;
     }
   }
@@ -849,6 +857,7 @@ function assignToCourt(courtId,matchId,bracketId,levelId){
 }
 
 function endCourtMatch(courtId){
+  if(!isScorerAuthorized()){toast('Access not granted for this tournament','er');return;}
   const court=S.courts.find(c=>c.id===courtId);
   if(!court||!court.matchId)return;
   S.scoreModal={courtId,mId:court.matchId,brId:court.bracketId,lvlId:court.levelId,s1:court.liveScore.s1,s2:court.liveScore.s2};
@@ -864,11 +873,12 @@ function assignNextFromQueue(courtId){
 }
 
 function updateLiveScore(courtId,side,delta){
+  if(!isScorerAuthorized()){toast('Access not granted for this tournament','er');return;}
   const c=S.courts.find(x=>x.id===courtId);if(!c)return;
   if(side===1)c.liveScore.s1=Math.max(0,c.liveScore.s1+delta);
   else c.liveScore.s2=Math.max(0,c.liveScore.s2+delta);
   render();
-  fbPushCourts(); // sync live score to all devices
+  fbPushCourts();
 }
 
 function swapCourtSides(courtId){
@@ -2424,6 +2434,7 @@ function renderScoreModal(){
   </div>`;
 }
 async function submitScore(){
+  if(!isScorerAuthorized()){toast('Access not granted for this tournament','er');S.scoreModal=null;render();return;}
   const sm=S.scoreModal;
   const brId=sm.brId||sm.bracketId;const mId=sm.mId||sm.matchId;
   const m=getBrMatch(brId,mId);const{lvl,br}=getLvlAndBr(brId);if(!m)return;
@@ -2432,9 +2443,7 @@ async function submitScore(){
   const freed=S.courts.find(c=>!c.matchId&&sm.courtId===c.id);
   if(freed&&S.matchQueue.length){const next=S.matchQueue[0];S.matchQueue.shift();assignToCourtDirect(freed.id,next.matchId,next.bracketId,next.levelId);}
   S.scoreModal=null;render();toast('Score saved!','ok');
-  // Excel record
   if(S.sheetsUrl.trim()) syncMatchScore(m,lvl?.name,br?.label,false);
-  // Firebase sync
   fbPushMatchScore(mId,brId,sm.s1,sm.s2,'finished');
   fbPushCourts();
   fbPushTournament();
@@ -2551,9 +2560,48 @@ async function submitCrossScore(){
 // ═══════════════════════════════════════════════════════════
 //  SCORER VIEW — full scoreboard
 // ═══════════════════════════════════════════════════════════
+// ── SCORER AUTHORIZATION ──────────────────────────────────
+// Called at every score-entry point. Returns true only if:
+//   1. Role is not scorer (admin/superadmin can always score)
+//   2. Role is scorer AND tournament has no ownership (legacy)
+//   3. Role is scorer AND explicitly in allowedScorers list
+function isScorerAuthorized(){
+  if(S.role!=='scorer') return true; // admin/superadmin always allowed
+  const t=S.tournament;
+  if(!t) return false;
+  // If Firebase is active and tournament has an owner, require explicit access
+  if(DB&&t.createdBy){
+    const allowed=t.allowedScorers||[];
+    return allowed.includes(S.user?.username);
+  }
+  // Firebase not configured OR legacy tournament with no owner — allow
+  return true;
+}
+
 function renderScorer(){
   const t=S.tournament;
-  if(!t)return`<div class="empty"><div class="empty-i">📋</div><div class="empty-t">No active tournament</div></div>`;
+  if(!t){
+    return`<div class="empty">
+      <div class="empty-i">📋</div>
+      <div class="empty-t">No active tournament</div>
+      <div class="empty-s">Ask your admin to create a tournament and grant you access</div>
+    </div>`;
+  }
+
+  // ── ACCESS GATE ───────────────────────────────────────────
+  if(!isScorerAuthorized()){
+    const allowed=t.allowedScorers||[];
+    return`<div class="empty">
+      <div class="empty-i">🔒</div>
+      <div class="empty-t">Access not granted</div>
+      <div class="empty-s" style="max-width:280px;margin:8px auto 0">
+        You don't have scorer access to <strong>${t.name}</strong>.<br>
+        Ask the admin to grant your account (<code style="background:var(--surface2);padding:1px 6px;border-radius:4px">${S.user?.username}</code>) access.
+      </div>
+      ${DB?`<button class="btn btn-out btn-sm" style="margin-top:18px" onclick="fbLoadActiveTournament().then(render)">↻ Refresh Access</button>`:''}
+    </div>`;
+  }
+
   // If a court is selected for scoring, show the scoreboard
   const selCourt=S.scorerCourtId?S.courts.find(c=>c.id===S.scorerCourtId):null;
   if(selCourt&&selCourt.matchId){
@@ -2693,7 +2741,7 @@ function renderScorerBoard(court){
 // ═══════════════════════════════════════════════════════════
 function renderPublic(){
   const t=S.tournament;
-  if(!t||!t.levels.length)return`<div class="empty"><div class="empty-i">🏸</div><div class="empty-t">No tournament data</div></div>`;
+  if(!t||!t.levels.length)return`<div class="empty"><div class="empty-i">🏸</div><div class="empty-t">No tournament data</div><div class="empty-s">Waiting for tournament to load…</div></div>`;
   refreshStandings();const pt=S.pubTab||'courts';
   return`<div>
     <div class="fbetween" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">
@@ -2701,37 +2749,70 @@ function renderPublic(){
       ${S.courts.some(c=>c.matchId)?`<span class="badge bg-g" style="font-size:11px;padding:5px 12px">● ${S.courts.filter(c=>c.matchId).length} Match${S.courts.filter(c=>c.matchId).length!==1?'es':''} Live</span>`:''}
     </div>
     <div class="tabs">
-      ${['courts','queue','standings','matches','crossover'].map(tab=>`<div class="tab${pt===tab?' active':''}" onclick="S.pubTab='${tab}';render()">${tab.charAt(0).toUpperCase()+tab.slice(1)}</div>`).join('')}
+      ${['courts','standings','matches','crossover'].map(tab=>`<div class="tab${pt===tab?' active':''}" onclick="S.pubTab='${tab}';render()">${tab.charAt(0).toUpperCase()+tab.slice(1)}</div>`).join('')}
     </div>
     ${pt==='courts'?renderPubCourts():''}
-    ${pt==='queue'?renderPubQueue():''}
     ${pt==='standings'?renderPubStandings():''}
     ${pt==='matches'?renderPubMatches():''}
     ${pt==='crossover'?renderPubCrossover():''}
   </div>`;
 }
+
 function renderPubCourts(){
   const t=S.tournament;
-  return`<div>
-    <div class="${`courts-grid n${Math.min(S.courts.length,3)}`}">
-      ${S.courts.map(c=>{const m=getCourtMatch(c);return`<div class="bmt-court${m?' active':' empty'}">
-        <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 300 240" preserveAspectRatio="none">
-          <rect x="10" y="10" width="280" height="220" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
-          <line x1="10" y1="110" x2="290" y2="110" stroke="rgba(255,255,255,.18)" stroke-width="1.2"/>
-          <line x1="28" y1="10" x2="28" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
-          <line x1="272" y1="10" x2="272" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
-          <rect x="8" y="106" width="284" height="8" fill="rgba(255,255,255,.25)" rx="2"/>
-        </svg>
-        <div class="court-name-wrap"><span class="court-name-display" style="cursor:default">${c.name}</span></div>
-        <div class="court-content">
-          <div class="court-half top">${m?`<div class="court-player-name">${fmtPair(m.team1,t)}</div><div class="court-score-big">${c.liveScore.s1}</div>`:`<div style="color:rgba(255,255,255,.2);font-size:12px">EMPTY</div>`}</div>
-          <div class="court-net-area"><div class="court-net-post-l"></div><div class="court-net-line"></div><div class="court-net-post-r"></div></div>
-          <div class="court-half bottom">${m?`<div class="court-score-big">${c.liveScore.s2}</div><div class="court-player-name">${fmtPair(m.team2,t)}</div>`:`<div style="color:rgba(255,255,255,.12);font-size:11px">Waiting</div>`}</div>
-        </div>
-        <div class="court-status ${m?'live':'empty'}">${m?'● LIVE':'—'}</div>
-      </div>`;}).join('')}
-    </div>
+  const queue=S.matchQueue||[];
+
+  // ── Court cards ──
+  const courtsHtml=`<div class="${`courts-grid n${Math.min(S.courts.length,3)}`}" style="margin-bottom:${queue.length||true?'24px':'0'}">
+    ${S.courts.map(c=>{const m=getCourtMatch(c);return`<div class="bmt-court${m?' active':' empty'}">
+      <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 300 240" preserveAspectRatio="none">
+        <rect x="10" y="10" width="280" height="220" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
+        <line x1="10" y1="110" x2="290" y2="110" stroke="rgba(255,255,255,.18)" stroke-width="1.2"/>
+        <line x1="28" y1="10" x2="28" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+        <line x1="272" y1="10" x2="272" y2="230" stroke="rgba(255,255,255,.1)" stroke-width="1"/>
+        <rect x="8" y="106" width="284" height="8" fill="rgba(255,255,255,.25)" rx="2"/>
+      </svg>
+      <div class="court-name-wrap"><span class="court-name-display" style="cursor:default">${c.name}</span></div>
+      <div class="court-content">
+        <div class="court-half top">${m?`<div class="court-player-name">${fmtPair(m.team1,t)}</div><div class="court-score-big">${c.liveScore.s1}</div>`:`<div style="color:rgba(255,255,255,.2);font-size:12px">EMPTY</div>`}</div>
+        <div class="court-net-area"><div class="court-net-post-l"></div><div class="court-net-line"></div><div class="court-net-post-r"></div></div>
+        <div class="court-half bottom">${m?`<div class="court-score-big">${c.liveScore.s2}</div><div class="court-player-name">${fmtPair(m.team2,t)}</div>`:`<div style="color:rgba(255,255,255,.12);font-size:11px">Waiting</div>`}</div>
+      </div>
+      <div class="court-status ${m?'live':'empty'}">${m?'● LIVE':'—'}</div>
+    </div>`;}).join('')}
   </div>`;
+
+  // ── Queue section directly below courts ──
+  const queueHtml=`<div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Up Next</div>
+      <span class="badge bg-b">${queue.length} in queue</span>
+    </div>
+    ${!queue.length
+      ?`<div style="padding:18px;background:var(--surface2);border-radius:var(--rs);text-align:center;color:var(--text3);font-size:13px">
+          No matches queued yet — the organizer will add upcoming matches here
+        </div>`
+      :`<div style="display:flex;flex-direction:column;gap:6px">
+        ${queue.map((q,i)=>{
+          if(!S.tournament?.levels) return`<div class="panel" style="opacity:.4"><div style="font-size:12px;color:var(--text3)">#${i+1} — Loading…</div></div>`;
+          let m=null,lvl=null,br=null;
+          try{const res=getLvlAndBr(q.bracketId);lvl=res.lvl;br=res.br;if(br)m=br.matches.find(x=>x.id===q.matchId);}catch(e){}
+          if(!m) return`<div class="panel" style="opacity:.4"><div style="font-size:12px;color:var(--text3)">#${i+1} — Match loading…</div></div>`;
+          return`<div class="panel" style="display:flex;align-items:center;gap:14px;padding:10px 14px">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:900;color:${i===0?'var(--accent)':'var(--text3)'};min-width:36px;text-align:center;line-height:1">${i+1}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                ${fmtPair(m.team1,t)} <span style="color:var(--text3);font-weight:400">vs</span> ${fmtPair(m.team2,t)}
+              </div>
+              <div style="font-size:10px;color:var(--text3);margin-top:2px">${lvl?.name||''} · ${br?.label||''} · Round ${m.round||''}</div>
+            </div>
+            ${i===0?`<span class="badge bg-y" style="font-size:10px;white-space:nowrap">On Deck</span>`:`<span class="badge bg-n" style="font-size:10px">#${i+1}</span>`}
+          </div>`;
+        }).join('')}
+      </div>`}
+  </div>`;
+
+  return`<div>${courtsHtml}${queueHtml}</div>`;
 }
 function renderPubStandings(){
   const t=S.tournament;
@@ -2753,68 +2834,6 @@ function renderPubMatches(){
       </div>`).join('')}
     </div>`).join('')}
   </div>`).join('')}</div>`;
-}
-function renderPubQueue(){
-  const t=S.tournament;
-  if(!t) return`<div class="empty"><div class="empty-i">📋</div><div class="empty-t">No tournament loaded</div></div>`;
-  // Live courts
-  const liveCourts=S.courts.filter(c=>c.matchId);
-  const queue=S.matchQueue||[];
-  return`<div>
-    <!-- Live Now -->
-    ${liveCourts.length?`<div style="margin-bottom:18px">
-      <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">● On Court Now (${liveCourts.length})</div>
-      ${liveCourts.map(c=>{
-        const m=getCourtMatch(c);
-        if(!m)return'';
-        return`<div class="panel fbetween" style="margin-bottom:6px;border-color:rgba(61,214,140,.3);background:rgba(61,214,140,.04)">
-          <div>
-            <div style="font-size:10px;font-weight:700;color:var(--accent2);margin-bottom:3px">${c.name}</div>
-            <div style="font-size:14px;font-weight:700">${fmtPair(m.team1,t)} <span style="color:var(--text3);font-weight:400">vs</span> ${fmtPair(m.team2,t)}</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--accent)">${c.liveScore.s1} — ${c.liveScore.s2}</div>
-            <span class="badge bg-g">● Live</span>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`:
-    `<div style="margin-bottom:16px;padding:14px;background:var(--surface2);border-radius:var(--rs);text-align:center;color:var(--text3);font-size:13px">No matches currently on court</div>`}
-
-    <!-- Queued Matches -->
-    <div>
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
-        Up Next — ${queue.length} match${queue.length!==1?'es':''} in queue
-      </div>
-      ${!queue.length
-        ?`<div class="empty" style="padding:24px"><div class="empty-i">📋</div>
-           <div class="empty-t">No matches queued yet</div>
-           <div class="empty-s">The organizer will add upcoming matches to the queue</div></div>`
-        :queue.map((q,i)=>{
-          // Guard: getBrMatch needs S.tournament to be loaded with levels
-          if(!S.tournament||!S.tournament.levels) return'';
-          let m=null,lvl=null,br=null;
-          try{
-            const res=getLvlAndBr(q.bracketId);
-            lvl=res.lvl; br=res.br;
-            if(br) m=br.matches.find(x=>x.id===q.matchId);
-          }catch(e){}
-          if(!m) return`<div class="panel" style="margin-bottom:6px;opacity:.5">
-            <div style="font-size:12px;color:var(--text3)">#${i+1} — Match loading…</div>
-          </div>`;
-          return`<div class="panel fbetween" style="margin-bottom:6px">
-            <div style="display:flex;align-items:center;gap:12px">
-              <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--text3);min-width:30px;text-align:center">${i+1}</div>
-              <div>
-                <div style="font-size:13px;font-weight:600">${fmtPair(m.team1,t)} <span style="color:var(--text3)">vs</span> ${fmtPair(m.team2,t)}</div>
-                <div style="font-size:10px;color:var(--text3);margin-top:2px">${lvl?.name||''} · ${br?.label||''} · Round ${m.round||''}</div>
-              </div>
-            </div>
-            <span class="badge bg-b">#${i+1}</span>
-          </div>`;
-        }).join('')}
-    </div>
-  </div>`;
 }
 function renderPubCrossover(){
   if(!S.tournament?.crossover)return`<div class="empty"><div class="empty-i">🏆</div><div class="empty-t">Crossover not started</div></div>`;
