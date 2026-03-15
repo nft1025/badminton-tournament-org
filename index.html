@@ -22,14 +22,17 @@ button,input,select,textarea{font-family:'Barlow',sans-serif}
 
 /* NAV */
 #app{min-height:100vh;display:flex;flex-direction:column}
-.nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;gap:8px;height:52px;flex-shrink:0;position:sticky;top:0;z-index:200}
-.nav-logo{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--accent);letter-spacing:.06em;flex:1;white-space:nowrap}
+.nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;display:flex;align-items:center;gap:6px;height:50px;flex-shrink:0;position:sticky;top:0;z-index:200;overflow:hidden}
+.nav-logo{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:19px;color:var(--accent);letter-spacing:.06em;white-space:nowrap;flex-shrink:0}
 .nav-logo span{color:var(--text);font-weight:400}
-.nav-tab{background:none;border:none;color:var(--text2);font-size:11px;font-weight:700;padding:5px 10px;border-radius:20px;transition:all .2s;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;white-space:nowrap}
+.nav-tabs{display:flex;align-items:center;gap:4px;flex:1;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-ms-overflow-style:none;padding:0 4px}
+.nav-tabs::-webkit-scrollbar{display:none}
+.nav-tab{background:none;border:none;color:var(--text2);font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;transition:all .2s;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .nav-tab.active{background:var(--accent);color:var(--primary)}
 .nav-tab:hover:not(.active){background:var(--surface2);color:var(--text)}
-.nav-user{font-size:11px;color:var(--text3);padding:3px 9px;background:var(--surface2);border-radius:20px;white-space:nowrap}
-.logout-btn{background:none;border:1px solid var(--border);color:var(--text2);font-size:11px;padding:3px 9px;border-radius:20px;cursor:pointer;transition:all .2s}
+.nav-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.nav-user{font-size:10px;color:var(--text3);padding:3px 8px;background:var(--surface2);border-radius:20px;white-space:nowrap;max-width:100px;overflow:hidden;text-overflow:ellipsis}
+.logout-btn{background:none;border:1px solid var(--border);color:var(--text2);font-size:11px;padding:3px 8px;border-radius:20px;cursor:pointer;transition:all .2s;white-space:nowrap;flex-shrink:0}
 .logout-btn:hover{border-color:var(--danger);color:var(--danger)}
 
 /* FIREBASE STATUS */
@@ -307,9 +310,15 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
   .courts-grid.n2,.courts-grid.n3,.courts-grid.n4,.courts-grid.n5,.courts-grid.n6{grid-template-columns:1fr}
   .scoreboard-body{grid-template-columns:1fr}
   .score-divider{display:none}
-  .main{padding:12px}.nav{gap:5px}.nav-tab{font-size:10px;padding:4px 7px}
+  .main{padding:12px}
   .score-side .big-score{font-size:80px}
   .scoreboard.fs-mode .big-score{font-size:120px}
+  .nav-user{display:none}
+  .brkt-grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
+  .steps{flex-wrap:wrap;gap:8px}
+  .ssep{display:none}
+  .modal{padding:18px;margin:12px}
+  .htbl th,.htbl td{padding:8px 8px;font-size:11px}
 }
 </style>
 <!-- Firebase SDK (compat mode — works as plain scripts, no bundler needed) -->
@@ -650,24 +659,55 @@ function stopSubscriptions(){
   _unsubscribes=[];
 }
 
-// Load ALL active (non-ended) tournaments — shows picker if multiple
+// Load ALL active (non-ended) tournaments — NO compound index needed
 async function fbLoadAllActiveTournaments(){
   if(!DB)return [];
   try {
+    // Use only a simple where clause — no orderBy to avoid needing a composite index
     const snap=await DB.collection('tournaments')
       .where('ended','==',false)
-      .orderBy('updatedAt','desc')
       .limit(10).get();
-    if(snap.empty) return [];
-    return snap.docs.map(d=>({
+    if(snap.empty){
+      // Fallback: index might not exist yet — try fetching all recent docs
+      const all=await DB.collection('tournaments')
+        .orderBy('updatedAt','desc').limit(10).get();
+      const active=all.docs.filter(d=>!d.data().ended);
+      if(!active.length) return [];
+      return active.map(d=>({
+        id:d.id, name:d.data().name||'Unnamed',
+        category:d.data().category||'',
+        numCourts:d.data().numCourts||1,
+        created:d.data().created||'',
+        updatedAt:d.data().updatedAt||0
+      }));
+    }
+    // Sort client-side by updatedAt descending
+    const results = snap.docs.map(d=>({
       id:d.id, name:d.data().name||'Unnamed',
       category:d.data().category||'',
       numCourts:d.data().numCourts||1,
       created:d.data().created||'',
-      updatedAt:d.data().updatedAt||0,
-      raw:d.data()
+      updatedAt:d.data().updatedAt||0
     }));
-  } catch(e){ console.warn('fbLoadAllActive:',e.message); return []; }
+    results.sort((a,b)=>b.updatedAt-a.updatedAt);
+    return results;
+  } catch(e){
+    console.warn('fbLoadAllActive error:',e.message);
+    // Final fallback: try without any filter
+    try {
+      const all=await DB.collection('tournaments')
+        .orderBy('updatedAt','desc').limit(20).get();
+      return all.docs
+        .filter(d=>!d.data().ended)
+        .map(d=>({
+          id:d.id, name:d.data().name||'Unnamed',
+          category:d.data().category||'',
+          numCourts:d.data().numCourts||1,
+          created:d.data().created||'',
+          updatedAt:d.data().updatedAt||0
+        }));
+    } catch(e2){ console.warn('fbLoadAllActive fallback failed:',e2.message); return []; }
+  }
 }
 
 // Load a specific tournament by ID and start subscriptions
@@ -723,14 +763,19 @@ async function fbLoadHistory(){
   try {
     const snap=await DB.collection('tournaments')
       .orderBy('updatedAt','desc').limit(30).get();
-    S.history=snap.docs.map(d=>({
-      id:d.id, name:d.data().name, category:d.data().category,
-      ended:d.data().ended,
-      createdAt:d.data().created, endedAt:d.data().endedAt||'',
-      totalPlayers: (() => {
-        try{const lvls=JSON.parse(d.data().levels||'[]');return lvls.reduce((a,l)=>a+l.players.length+(l.highPlayers||[]).length+(l.midPlayers||[]).length,0);}catch{return 0;}
-      })(),
-    }));
+    S.history=snap.docs.map(d=>{
+      const data=d.data();
+      let totalPlayers=0;
+      try{const lvls=JSON.parse(data.levels||'[]');totalPlayers=lvls.reduce((a,l)=>a+l.players.length+(l.highPlayers||[]).length+(l.midPlayers||[]).length,0);}catch{}
+      return{
+        id:d.id, name:data.name||'', category:data.category||'',
+        ended:data.ended||false,
+        champion:data.champion||'', runnerUp:data.runnerUp||'',
+        totalMatches:data.totalMatches||0,
+        totalPlayers,
+        createdAt:data.created||'', endedAt:data.endedAt||''
+      };
+    });
     S.historyLoaded=true;
   } catch(e){ console.warn('fbLoadHistory:',e.message); S.historyLoaded=true; }
 }
@@ -839,9 +884,13 @@ function render(){
   app.innerHTML=`
     <nav class="nav">
       <div class="nav-logo">🏸 SHUTTLE<span>PRO</span></div>
-      ${tabs.map(t=>`<button class="nav-tab${tab===t?' active':''}" onclick="ST('${t}')">${t.replace(/-/g,' ')}</button>`).join('')}
-      <div class="nav-user">${S.user.name}</div>
-      <button class="logout-btn" onclick="logout()">Logout</button>
+      <div class="nav-tabs">
+        ${tabs.map(t=>`<button class="nav-tab${tab===t?' active':''}" onclick="ST('${t}')">${t.replace(/-/g,' ')}</button>`).join('')}
+      </div>
+      <div class="nav-right">
+        <div class="nav-user">${S.user.name}</div>
+        <button class="logout-btn" onclick="logout()">Exit</button>
+      </div>
     </nav>
     ${renderFbBar()}
     ${role==='superadmin'&&tab==='super-admin'?renderSheetsBar():''}
@@ -1138,13 +1187,27 @@ function renderEndModal(){
   </div>`;
 }
 async function doEndTournament(){
+  const t=S.tournament;
+  // Find champion from crossover
+  let champion='',runnerUp='';
+  if(t.crossover){
+    const f=t.crossover.stages.find(s=>s.name==='Final');
+    if(f&&f.matches[0]&&f.matches[0].winner){
+      champion=fmtPair(f.matches[0].winner.pair,t);
+      const fm=f.matches[0];
+      const loser=fm.t1&&fm.t2?(JSON.stringify(fm.winner.pair)===JSON.stringify(fm.t1.pair)?fm.t2:fm.t1):null;
+      if(loser) runnerUp=fmtPair(loser.pair,t);
+    }
+  }
+  const totalMatches=t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.length,0),0);
   // Excel records
   await syncStandings();await syncCrossover();await syncEndTournament();
-  // Firebase — mark ended so it won't load as active on new devices
-  if(DB&&S.tournament){
+  // Firebase — mark ended + save summary so history shows correctly
+  if(DB&&t){
     try{
-      await DB.collection('tournaments').doc(S.tournament.id).update({
-        ended:true,endedAt:new Date().toISOString(),updatedAt:Date.now()
+      await DB.collection('tournaments').doc(t.id).update({
+        ended:true, endedAt:new Date().toISOString(), updatedAt:Date.now(),
+        champion, runnerUp, totalMatches
       });
     }catch(e){console.warn('fbEndTournament:',e.message);}
   }
