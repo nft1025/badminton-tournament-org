@@ -1,68 +1,120 @@
 # ShuttlePro — Badminton Tournament Organizer
 
-## Two integrations, two purposes
+## How secrets are handled
 
-| Integration | Purpose | When it syncs |
-|---|---|---|
-| **Firebase Firestore** | Cross-device real-time sync — courts, live scores, queue | Every score update, assignment, swap |
-| **Google Apps Script** | Excel recording for organizer records | After each match, on tournament end |
-
----
-
-## Step 1 — Deploy to Vercel
-
-Only two files needed at root:
-- `index.html`
-- `vercel.json`
-
-```
-npm i -g vercel
-vercel --prod
-```
-Or drag-and-drop to vercel.com/new (Framework: Other, build command: blank).
+Firebase API keys are **injected at build time** via Vercel environment variables.
+- `index.html` in this repo contains only placeholder values — safe to commit publicly
+- `build.js` runs during Vercel deploy, replaces placeholders with real values from env vars
+- The built file (`public/index.html`) is never committed — it's generated fresh each deploy
 
 ---
 
-## Step 2 — Firebase Firestore Setup
+## Setup Guide
 
-1. Go to **console.firebase.google.com** → Create project (free Spark plan)
-2. Click **Firestore Database** → Create database → **Start in test mode**
-3. Click **Project Settings** → **Your Apps** → Add Web App → copy `firebaseConfig`
-4. In Firestore → **Indexes** tab → Add composite index:
-   - Collection: `tournaments`
+### Step 1 — Push to GitHub (safe — no secrets in the repo)
+
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/YOUR_USERNAME/shuttlepro.git
+git push -u origin main
+```
+
+The `.gitignore` excludes `public/` and `.env*` files — your secrets never touch Git.
+
+---
+
+### Step 2 — Connect to Vercel
+
+1. Go to **vercel.com/new** → Import your GitHub repo
+2. Framework Preset: **Other**
+3. Build Command: `node build.js` ← Vercel reads this from vercel.json automatically
+4. Output Directory: `public` ← also from vercel.json
+5. **Do NOT click Deploy yet** — add env vars first (Step 3)
+
+---
+
+### Step 3 — Add Firebase env vars in Vercel
+
+In Vercel → your project → **Settings → Environment Variables**, add these four:
+
+| Variable Name          | Value (from Firebase Console)        |
+|------------------------|--------------------------------------|
+| `FIREBASE_API_KEY`     | `AIzaSyD-your-actual-key...`         |
+| `FIREBASE_PROJECT_ID`  | `your-project-id`                    |
+| `FIREBASE_APP_ID`      | `1:123456789:web:abcdef...`          |
+| `FIREBASE_SENDER_ID`   | `123456789012`                       |
+
+Set Environment to **Production, Preview, Development** for all four.
+
+Then click **Deploy** (or trigger a redeploy from the Deployments tab).
+
+---
+
+### Step 4 — Firebase Firestore setup
+
+1. **console.firebase.google.com** → Your project → Firestore Database → Create database → **Test mode**
+2. **Indexes tab** → Add composite index:
+   - Collection ID: `tournaments`
    - Fields: `ended` (Ascending) + `updatedAt` (Descending)
    - Query scope: Collection
-5. In ShuttlePro: login as **Super Admin** → **Super Admin tab** → **Integrations**
-6. Paste `apiKey`, `projectId`, `appId`, `messagingSenderId` → click **Save & Connect**
-7. Status bar turns green: **Firebase live — all devices synced**
-
-### What Firebase stores
-```
-tournaments/
-  {id}/
-    name, category, created, numCourts
-    levels       ← full bracket/match data (JSON)
-    crossover    ← crossover stages (JSON)
-    ended, endedAt
-    live/
-      courts     ← live court assignments + scores + queue
-      crossover  ← live crossover state
-      matches/   ← individual match scores
-```
+3. Wait ~2 minutes for index to build
 
 ---
 
-## Step 3 — Google Sheets / Apps Script (already configured)
+### Step 5 — Google Sheets (Apps Script)
 
-The Apps Script URL is already embedded. To verify:
-1. Login as **Super Admin** → **Integrations** tab → **Test Connection**
+The Apps Script URL is already in the HTML. To verify:
+- Login as Super Admin → Integrations → **Test Connection**
+- If it fails, redeploy the Apps Script (see `ShuttlePro_AppScript.gs`)
 
-Apps Script writes to Google Sheets:
-- `TournamentName_Setup` — players and brackets (on bracket generation)
-- `TournamentName_Matches` — one row per finished match (live, after each game)
-- `TournamentName_Standings` — final standings (on tournament end)
-- `TournamentName_Crossover` — crossover results
-- `TournamentHistory` — one row per ended tournament
+---
+
+## Local development (without Vercel)
+
+To test locally with real Firebase, create a `.env` file (never commit it):
+
+```
+FIREBASE_API_KEY=AIzaSyD...
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_APP_ID=1:123...
+FIREBASE_SENDER_ID=123456...
+```
+
+Then run:
+```bash
+node build.js        # generates public/index.html with your real config
+npx serve public     # serves it at http://localhost:3000
+```
+
+Or just open `public/index.html` directly in a browser.
+
+---
+
+## Firestore Security Rules (after testing)
+
+Switch from test mode to locked-down rules in Firebase Console → Firestore → Rules:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /tournaments/{tid} {
+      allow read: if true;
+      allow write: if true;
+      match /{sub}/{doc} {
+        allow read, write: if true;
+      }
+    }
+    match /_ping/{doc} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+For tighter security later, you can add Firebase Authentication and restrict writes to authenticated users.
 
 ---
 
@@ -75,51 +127,15 @@ Apps Script writes to Google Sheets:
 | Super Admin | superadmin | super123  |
 | Public      | —          | —         |
 
-Change passwords via **Super Admin → User Management**.
+Change via **Super Admin → User Management**.
 
 ---
 
-## How devices connect in real-time
+## Why Firebase API keys are not truly secret
 
-```
-Admin device          Scorer device         Public device
-(sets up tournament,  (enters live scores,  (views courts,
- manages courts,       fullscreen board)     standings,
- assigns matches)                            crossover)
-       │                     │                    │
-       └─────────────────────┴────────────────────┘
-                             │
-                    Firebase Firestore
-                    (real-time sync)
-                             │
-                    Google Sheets
-                    (Excel records)
-```
+Firebase API keys identify your project to Google's servers — they are not authentication credentials. They are safe to expose in the browser because:
+- Access is controlled by **Firestore Security Rules** (server-side)
+- Rate limiting and quotas are enforced by Firebase per-project
+- Adding **Firebase App Check** later can restrict which domains can use your key
 
-- Admin creates tournament → Firestore stores it → Scorer/Public load it automatically
-- Scorer taps score → Firestore updates courts doc → Public sees it within ~1 second
-- Match ends → Apps Script writes to Excel sheet → permanent record saved
-
----
-
-## Firestore Security (after testing)
-
-Once working, switch from test mode to proper rules in Firebase Console → Firestore → Rules:
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /tournaments/{tid} {
-      allow read: if true;
-      allow write: if true; // tighten with auth later
-      match /{sub}/{doc} {
-        allow read, write: if true;
-      }
-    }
-    match /_ping/{doc} {
-      allow read, write: if true;
-    }
-  }
-}
-```
+The env var approach is still best practice — it keeps your repo clean and makes it easy to rotate keys.

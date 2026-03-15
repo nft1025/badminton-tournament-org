@@ -321,42 +321,78 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 <div class="toast-wrap" id="toasts"></div>
 <script>
 // ═══════════════════════════════════════════════════════════
-//  CONFIG — paste your values here
+//  CONFIG — edit these values, then redeploy to Vercel
+//  Every device that opens the URL will auto-connect.
 // ═══════════════════════════════════════════════════════════
 
 // ── GOOGLE SHEETS (Apps Script) — for Excel recording ────
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzdnFUHUwp3tEacOem6QF7uEk4GSXMEJYjiPArJMRkAEov-aKyhCdSbY9FyPsa7lHKF-Q/exec';
 
-// ── FIREBASE — for real-time cross-device sync ────────────
-// Get these from: Firebase Console → Project Settings → Your Apps → SDK setup
+// ── FIREBASE — paste your project values here ─────────────
+// Find them: Firebase Console → Project Settings → Your Apps → SDK setup (Config)
+// After pasting, redeploy the HTML to Vercel — ALL devices will auto-connect.
 const FB_CONFIG = {
-  apiKey:            "AIzaSyDKj_Ij6_jI-Ko9R8-MGTeR_uac3uNBe2g",
-  authDomain:        "badminton-tournament-db.firebaseapp.com",
-  projectId:         "badminton-tournament-db",
-  storageBucket:     "badminton-tournament-db.firebasestorage.app",
-  messagingSenderId: "869217823278",
-  appId:             "1:869217823278:web:ce3306eaa472c0f6c38dbf"
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID"
 };
 
 // ── Firebase init ─────────────────────────────────────────
-let DB = null;   // Firestore instance — null until init
-let FB_STATUS = 'off'; // off | connecting | on | err
+let DB = null;
+let FB_STATUS = 'off';
 let FB_MSG = '';
-let _unsubscribes = []; // active Firestore listeners to clean up
+let _unsubscribes = [];
+
+function fbConfigured(){
+  // Check if the hardcoded config has real values
+  if(FB_CONFIG.apiKey && FB_CONFIG.apiKey !== 'YOUR_API_KEY') return true;
+  // Check if Super Admin saved config to localStorage on this browser
+  const saved = _fbLoadSavedConfig();
+  if(saved){ Object.assign(FB_CONFIG, saved); return true; }
+  return false;
+}
+
+function _fbSaveConfig(cfg){
+  try{ localStorage.setItem('sp_fb_cfg', JSON.stringify(cfg)); }catch(e){}
+}
+function _fbLoadSavedConfig(){
+  try{
+    const s = localStorage.getItem('sp_fb_cfg');
+    if(s){ const p=JSON.parse(s); if(p.apiKey&&p.projectId) return p; }
+  }catch(e){}
+  return null;
+}
 
 function fbInit(){
   try {
-    if(!FB_CONFIG.apiKey||FB_CONFIG.apiKey==='YOUR_API_KEY'){
+    if(!fbConfigured()){
       FB_STATUS='off'; FB_MSG='Not configured'; fbBarUpdate(); return;
     }
-    if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
-    DB = firebase.firestore();
-    FB_STATUS='connecting'; FB_MSG='Connecting…'; fbBarUpdate();
-    // Test connection with a lightweight read
-    DB.collection('_ping').doc('test').set({t:Date.now()})
-      .then(()=>{FB_STATUS='on';FB_MSG='Connected';fbBarUpdate();toast('Firebase connected ✓','ok');})
-      .catch(e=>{FB_STATUS='err';FB_MSG=e.message;fbBarUpdate();});
+    // Reset if previously initialised with different config
+    if(firebase.apps.length){
+      firebase.app().delete().then(()=>{ _doFbInit(); }).catch(()=>{ _doFbInit(); });
+    } else {
+      _doFbInit();
+    }
   } catch(e){
+    FB_STATUS='err'; FB_MSG=e.message; fbBarUpdate();
+  }
+}
+
+function _doFbInit(){
+  try{
+    firebase.initializeApp(FB_CONFIG);
+    DB = firebase.firestore();
+    // Enable persistence so the app works briefly offline
+    DB.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+    FB_STATUS='connecting'; FB_MSG='Connecting…'; fbBarUpdate();
+    DB.collection('_ping').doc('test').set({t:Date.now()})
+      .then(()=>{ FB_STATUS='on'; FB_MSG='Connected'; fbBarUpdate(); })
+      .catch(e=>{ FB_STATUS='err'; FB_MSG=e.message; fbBarUpdate(); });
+  }catch(e){
     FB_STATUS='err'; FB_MSG=e.message; fbBarUpdate();
   }
 }
@@ -365,7 +401,12 @@ function fbBarUpdate(){
   const bar=document.getElementById('fb-bar');
   if(!bar)return;
   const cls={off:'off',connecting:'sync',on:'on',err:'err'};
-  const lbl={off:'Firebase: Not configured',connecting:'Firebase: Connecting…',on:'Firebase: '+FB_MSG,err:'Firebase: Error — '+FB_MSG};
+  const lbl={
+    off:'Firebase: Not configured — all devices need the config embedded in the HTML',
+    connecting:'Firebase: Connecting…',
+    on:'Firebase: Live — all devices synced automatically',
+    err:'Firebase: Error — '+FB_MSG
+  };
   bar.querySelector('.fb-dot').className='fb-dot '+(cls[FB_STATUS]||'off');
   bar.querySelector('.fb-label').textContent=lbl[FB_STATUS]||'';
 }
@@ -1013,8 +1054,119 @@ function renderSuperAdmin(){
 
 function renderIntegrations(){
   const fbOk=FB_STATUS==='on';
+  const isHardcoded=FB_CONFIG.apiKey&&FB_CONFIG.apiKey!=='YOUR_API_KEY';
   const fbCls={off:'var(--text3)',connecting:'var(--accent)',on:'var(--accent2)',err:'var(--danger)'};
   const fbLbl={off:'Not configured',connecting:'Connecting…',on:FB_MSG,err:'Error — '+FB_MSG};
+
+  return`<div>
+
+    <!-- ── HOW IT WORKS ── -->
+    <div class="card" style="margin-bottom:16px;border-color:rgba(91,156,246,.3);background:rgba(91,156,246,.04)">
+      <div style="font-weight:700;font-size:14px;color:var(--accent3);margin-bottom:10px">⚡ How cross-device sync works</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.8">
+        Firebase credentials must be <strong style="color:var(--text)">embedded in the HTML file</strong> before deploying — not entered per-device.<br>
+        Once your credentials are in the file and deployed to Vercel, <strong style="color:var(--accent2)">every device that opens the URL auto-connects</strong> — no manual setup needed.<br>
+        <span style="color:var(--text3)">Entering config here saves it only for this browser session. To make it permanent for all devices, paste the values into the HTML file and redeploy.</span>
+      </div>
+    </div>
+
+    ${S._fbShowRedeployMsg&&fbOk?`
+    <div class="card" style="margin-bottom:16px;border-color:var(--accent);background:rgba(240,192,64,.06)">
+      <div style="font-weight:700;font-size:14px;color:var(--accent);margin-bottom:8px">⚠ This device is connected — but other devices won't be yet</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.8">
+        To make Firebase work on ALL devices automatically:<br>
+        1. Open your <code style="background:var(--surface3);padding:1px 5px;border-radius:4px">index.html</code> file in a text editor<br>
+        2. Find the <code style="background:var(--surface3);padding:1px 5px;border-radius:4px">FB_CONFIG</code> section near the top<br>
+        3. Replace <code style="background:var(--surface3);padding:1px 5px;border-radius:4px">YOUR_API_KEY</code> etc. with the values below<br>
+        4. Save the file and redeploy to Vercel (<code style="background:var(--surface3);padding:1px 5px;border-radius:4px">vercel --prod</code>)
+      </div>
+      <div style="margin-top:10px;background:var(--surface3);border-radius:var(--rs);padding:10px 14px;font-family:monospace;font-size:11px;color:var(--accent3);line-height:2">
+        apiKey: "${FB_CONFIG.apiKey}"<br>
+        projectId: "${FB_CONFIG.projectId}"<br>
+        appId: "${FB_CONFIG.appId}"<br>
+        messagingSenderId: "${FB_CONFIG.messagingSenderId}"
+      </div>
+    </div>`:''}
+
+    <!-- ── FIREBASE ── -->
+    <div class="card" style="margin-bottom:16px;border-color:${fbOk?'rgba(61,214,140,.3)':'var(--border)'}">
+      <div class="fbetween" style="margin-bottom:14px">
+        <div>
+          <div style="font-weight:700;font-size:16px">🔥 Firebase Firestore</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">Real-time sync — courts, scores, queue</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${isHardcoded?`<span class="badge bg-g" style="font-size:9px">Embedded in HTML ✓</span>`:`<span class="badge bg-n" style="font-size:9px">Session only</span>`}
+          <span class="badge" style="color:${fbCls[FB_STATUS]};background:${fbCls[FB_STATUS]}22;border:1px solid ${fbCls[FB_STATUS]}44">
+            ${FB_STATUS==='on'?'● Live':FB_STATUS==='connecting'?'◌ Connecting':FB_STATUS==='err'?'● Error':'○ Off'}
+          </span>
+        </div>
+      </div>
+
+      <div style="background:rgba(91,156,246,.06);border:1px solid rgba(91,156,246,.2);border-radius:var(--rs);padding:10px 13px;margin-bottom:14px;font-size:11px;color:var(--text2);line-height:1.7">
+        <strong style="color:var(--accent3)">First-time setup:</strong><br>
+        1. <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent3)">console.firebase.google.com</a> → Create project → Firestore → Start in test mode<br>
+        2. Project Settings → Your Apps → Add Web App → copy <code>firebaseConfig</code> values<br>
+        3. Add Firestore index: Collection <code>tournaments</code> · Field <code>ended</code> ASC + <code>updatedAt</code> DESC<br>
+        4. Paste values below → Save → then embed in HTML + redeploy for all devices
+      </div>
+
+      <div class="g2" style="margin-bottom:12px">
+        <div><label class="label">API Key</label>
+          <input class="inp inp-sm" id="fb-apiKey" placeholder="AIzaSy…"
+            value="${FB_CONFIG.apiKey!=='YOUR_API_KEY'?FB_CONFIG.apiKey:''}"/></div>
+        <div><label class="label">Project ID</label>
+          <input class="inp inp-sm" id="fb-projectId" placeholder="my-project-id"
+            value="${FB_CONFIG.projectId!=='YOUR_PROJECT_ID'?FB_CONFIG.projectId:''}"/></div>
+        <div><label class="label">App ID</label>
+          <input class="inp inp-sm" id="fb-appId" placeholder="1:123…:web:abc…"
+            value="${FB_CONFIG.appId!=='YOUR_APP_ID'?FB_CONFIG.appId:''}"/></div>
+        <div><label class="label">Messaging Sender ID</label>
+          <input class="inp inp-sm" id="fb-senderId" placeholder="123456789"
+            value="${FB_CONFIG.messagingSenderId!=='YOUR_SENDER_ID'?FB_CONFIG.messagingSenderId:''}"/></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-y" onclick="saveFbConfig()">Save & Connect This Device</button>
+        ${fbOk?`<button class="btn btn-out btn-sm" onclick="fbPushTournament().then(()=>toast('Pushed to Firebase','ok'))">Push Current Tournament</button>`:''}
+        ${FB_STATUS==='err'?`<button class="btn btn-out btn-sm" onclick="fbInit();render()">Retry</button>`:''}
+      </div>
+      ${fbOk&&!isHardcoded?`<div style="margin-top:10px;font-size:11px;color:var(--accent)">⚠ Connected this session only — embed config in HTML and redeploy to make permanent for all devices</div>`:''}
+      ${fbOk&&isHardcoded?`<div style="margin-top:10px;font-size:11px;color:var(--accent2)">✓ Config embedded — all devices auto-connect when they open the URL</div>`:''}
+    </div>
+
+    <!-- ── SHEETS ── -->
+    <div class="card">
+      <div class="fbetween" style="margin-bottom:12px">
+        <div>
+          <div style="font-weight:700;font-size:16px">📊 Google Sheets (Apps Script)</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">Excel records — match scores, standings, history</div>
+        </div>
+        <span class="badge ${S.sheetsStatus==='ok'?'bg-g':S.sheetsStatus==='err'?'bg-r':'bg-n'}">
+          ${S.sheetsStatus==='ok'?'● Active':S.sheetsStatus==='err'?'● Error':'○ Untested'}
+        </span>
+      </div>
+      <div style="background:var(--surface3);border-radius:var(--rs);padding:9px 13px;margin-bottom:12px;font-family:monospace;font-size:10px;color:var(--accent3);word-break:break-all">${S.sheetsUrl}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-b" onclick="testSheets()">Test Connection</button>
+        <button class="btn btn-out" onclick="manualSync()">Manual Sync to Sheets</button>
+      </div>
+      <hr class="sep"/>
+      <div style="font-weight:600;font-size:13px;margin-bottom:10px">What gets saved to Excel</div>
+      <div class="g2">
+        ${[
+          {i:'⚙️',t:'Setup',d:'On bracket generation — all players and pairs'},
+          {i:'🏸',t:'Match Scores',d:'After every match — one row per match'},
+          {i:'📊',t:'Standings',d:'On tournament end — final rankings'},
+          {i:'🏆',t:'Crossover',d:'After each crossover match result'}
+        ].map(x=>`<div class="panel" style="margin-bottom:0">
+          <div style="font-size:18px;margin-bottom:4px">${x.i}</div>
+          <div style="font-weight:700;font-size:12px">${x.t}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">${x.d}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
   return`<div>
     <!-- ── FIREBASE ── -->
     <div class="card" style="margin-bottom:16px;border-color:${fbOk?'rgba(61,214,140,.3)':'var(--border)'}">
@@ -1088,21 +1240,38 @@ function renderIntegrations(){
 }
 
 function saveFbConfig(){
-  const apiKey=document.getElementById('fb-apiKey')?.value.trim();
-  const projectId=document.getElementById('fb-projectId')?.value.trim();
-  const appId=document.getElementById('fb-appId')?.value.trim();
-  const senderId=document.getElementById('fb-senderId')?.value.trim();
-  if(!apiKey||!projectId){toast('API Key and Project ID are required','er');return;}
-  FB_CONFIG.apiKey=apiKey;
-  FB_CONFIG.projectId=projectId;
-  FB_CONFIG.authDomain=projectId+'.firebaseapp.com';
-  FB_CONFIG.storageBucket=projectId+'.appspot.com';
-  FB_CONFIG.appId=appId||FB_CONFIG.appId;
-  FB_CONFIG.messagingSenderId=senderId||FB_CONFIG.messagingSenderId;
-  // Re-init Firebase with new config (delete existing app first)
-  try{firebase.app().delete().then(()=>{DB=null;fbInit();render();});}
-  catch(e){DB=null;fbInit();render();}
-  toast('Firebase config saved — connecting…','inf');
+  const apiKey    = document.getElementById('fb-apiKey')?.value.trim();
+  const projectId = document.getElementById('fb-projectId')?.value.trim();
+  const appId     = document.getElementById('fb-appId')?.value.trim();
+  const senderId  = document.getElementById('fb-senderId')?.value.trim();
+  if(!apiKey||!projectId){ toast('API Key and Project ID are required','er'); return; }
+
+  // Apply to runtime config
+  FB_CONFIG.apiKey            = apiKey;
+  FB_CONFIG.projectId         = projectId;
+  FB_CONFIG.authDomain        = projectId+'.firebaseapp.com';
+  FB_CONFIG.storageBucket     = projectId+'.appspot.com';
+  FB_CONFIG.appId             = appId    || FB_CONFIG.appId;
+  FB_CONFIG.messagingSenderId = senderId || FB_CONFIG.messagingSenderId;
+
+  // Save to localStorage so this browser remembers it
+  _fbSaveConfig({...FB_CONFIG});
+
+  toast('Config saved — connecting…','inf');
+
+  // Re-init
+  DB=null; FB_STATUS='connecting';
+  if(firebase.apps.length){
+    firebase.app().delete()
+      .then(()=>{ _doFbInit(); render(); })
+      .catch(()=>{ _doFbInit(); render(); });
+  } else {
+    _doFbInit(); render();
+  }
+
+  // Show the redeploy instructions as a prominent message
+  S._fbShowRedeployMsg = true;
+  setTimeout(render, 1200);
 }
 function renderUserMgmt(){
   return`<div>
