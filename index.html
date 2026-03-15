@@ -335,7 +335,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 // ═══════════════════════════════════════════════════════════
 
 // ── GOOGLE SHEETS (Apps Script) — for Excel recording ────
-const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbz48-elJyisuq0js4z44hh05o69268Oqeo_tZwIie--SGBXaft-v0R_U8LpKI5kJ0tfzA/exec';
+const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzdnFUHUwp3tEacOem6QF7uEk4GSXMEJYjiPArJMRkAEov-aKyhCdSbY9FyPsa7lHKF-Q/exec';
 
 // ── FIREBASE — paste your project values here ─────────────
 // Find them: Firebase Console → Project Settings → Your Apps → SDK setup (Config)
@@ -443,7 +443,7 @@ const S={
   activeTournamentId:null,
   _activeTournamentList:[],
   _showTournamentPicker:false,
-  _loginRole:'admin',_loginErr:'',_tCat:null,_saTab:'users',
+  _loginRole:'admin',_loginErr:'',_tCat:null,_tName:'',_numCourts:2,_saTab:'users',
   users:[
     {id:1,username:'admin',password:'admin123',role:'admin',name:'Tournament Admin'},
     {id:2,username:'scorer',password:'scorer123',role:'scorer',name:'Court Scorer'},
@@ -525,10 +525,11 @@ async function fbPushTournament(){
     await DB.collection('tournaments').doc(t.id).set({
       id:t.id, name:t.name, category:t.category, created:t.created,
       numCourts:S.numCourts,
-      courts:JSON.stringify(S.courts), // include court IDs/names so other devices use same IDs
+      courts:JSON.stringify(S.courts),
       levels: JSON.stringify(t.levels),
       crossover: t.crossover?JSON.stringify(t.crossover):null,
       ended: t.ended||false,
+      createdBy: t.createdBy||'',
       updatedAt: Date.now()
     });
   } catch(e){ console.warn('fbPushTournament:',e.message); }
@@ -687,7 +688,8 @@ async function fbLoadAllActiveTournaments(){
       category:d.data().category||'',
       numCourts:d.data().numCourts||1,
       created:d.data().created||'',
-      updatedAt:d.data().updatedAt||0
+      updatedAt:d.data().updatedAt||0,
+      createdBy:d.data().createdBy||''
     }));
     results.sort((a,b)=>b.updatedAt-a.updatedAt);
     return results;
@@ -721,7 +723,8 @@ async function fbLoadTournamentById(tid){
       id:d.id||tid, name:d.name, category:d.category, created:d.created,
       levels:JSON.parse(d.levels||'[]'),
       crossover:d.crossover?JSON.parse(d.crossover):null,
-      ended:d.ended||false
+      ended:d.ended||false,
+      createdBy:d.createdBy||''
     };
     S.numCourts=d.numCourts||1;
     // Build courts with stable IDs matching what admin originally created
@@ -744,17 +747,26 @@ async function fbLoadTournamentById(tid){
   } catch(e){ console.warn('fbLoadTournamentById:',e.message); return false; }
 }
 
-// Legacy alias used by doLogin
+// Legacy alias used by doLogin — filters by ownership for admin/scorer
 async function fbLoadActiveTournament(){
   const list=await fbLoadAllActiveTournaments();
   if(!list.length) return false;
-  if(list.length===1){
-    return fbLoadTournamentById(list[0].id);
+
+  // Filter: admin & scorer only see their own tournaments; public & superadmin see all
+  const filtered = (S.role==='admin'||S.role==='scorer')
+    ? list.filter(t=>!t.createdBy||t.createdBy===S.user?.username)
+    : list;
+
+  // If none match ownership, show the unfiltered list (backwards compat for old tournaments with no createdBy)
+  const pool = filtered.length ? filtered : list;
+
+  if(pool.length===1){
+    return fbLoadTournamentById(pool[0].id);
   }
   // Multiple — show picker
-  S._activeTournamentList=list;
+  S._activeTournamentList=pool;
   S._showTournamentPicker=true;
-  return false; // caller will render the picker
+  return false;
 }
 
 // Load all past tournaments for history view (super admin)
@@ -950,10 +962,11 @@ function renderTournamentPicker(){
           <div class="fbetween">
             <div>
               <div style="font-weight:700;font-size:15px">${t.name}</div>
-              <div style="display:flex;gap:6px;margin-top:4px">
+              <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
                 <span class="badge bg-y">${t.category}</span>
                 <span class="badge bg-b">${t.numCourts} court${t.numCourts!==1?'s':''}</span>
                 <span class="badge bg-g">Active</span>
+                ${t.createdBy?`<span class="badge bg-n">by ${t.createdBy}</span>`:''}
               </div>
             </div>
             <div style="font-size:11px;color:var(--text3);text-align:right">
@@ -1169,26 +1182,33 @@ function getFinalist(){const t=S.tournament;if(!t||!t.crossover)return null;cons
 // ═══════════════════════════════════════════════════════════
 function renderEndModal(){
   const t=S.tournament;const finalist=getFinalist();
+  const isSA=S.role==='superadmin';
+  const allDone=allBrDone();
+  const pending=t?t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.filter(m=>m.status==='pending').length,0),0):0;
   return`<div class="overlay" onclick="S.endModal=false;render()">
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modal-title">🏁 End Tournament</div>
-      <div style="background:rgba(240,85,85,.08);border:1px solid rgba(240,85,85,.3);border-radius:var(--rs);padding:13px;margin-bottom:16px;font-size:13px">
-        End <strong>${t?.name}</strong>? All standings and scores will be saved to Google Sheets.
+      ${!allDone&&pending>0?`<div style="background:rgba(240,192,64,.08);border:1px solid rgba(240,192,64,.3);border-radius:var(--rs);padding:11px;margin-bottom:12px;font-size:12px">
+        ⚠ <strong>${pending} match${pending!==1?'es':''} still pending.</strong>
+        ${isSA?' As Super Admin you can force-end anyway.':' Complete all matches first, or ask Super Admin to force-end.'}
+      </div>`:''}
+      <div style="background:rgba(240,85,85,.08);border:1px solid rgba(240,85,85,.3);border-radius:var(--rs);padding:12px;margin-bottom:14px;font-size:13px">
+        End <strong>${t?.name}</strong>? Standings and scores will be saved to Google Sheets.
       </div>
       ${finalist?`<div class="end-banner" style="margin-bottom:14px;text-align:center">
         <div style="font-size:10px;color:var(--accent);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px">🏆 Champion</div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:900;color:var(--accent2)">${finalist}</div>
       </div>`:''}
-      <div style="display:flex;gap:8px;justify-content:flex-end">
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
         <button class="btn btn-out" onclick="S.endModal=false;render()">Cancel</button>
-        <button class="btn btn-r" onclick="doEndTournament()">End & Save</button>
+        ${(allDone||isSA)?`<button class="btn btn-r" onclick="doEndTournament(false)">${allDone?'End & Save':'Force End & Save'}</button>`:''}
+        ${isSA&&!allDone?`<button class="btn btn-out btn-sm" style="border-color:var(--danger);color:var(--danger)" onclick="doEndTournament(true)">Force End (discard pending)</button>`:''}
       </div>
     </div>
   </div>`;
 }
-async function doEndTournament(){
+async function doEndTournament(skipSave=false){
   const t=S.tournament;
-  // Find champion from crossover
   let champion='',runnerUp='';
   if(t.crossover){
     const f=t.crossover.stages.find(s=>s.name==='Final');
@@ -1200,21 +1220,19 @@ async function doEndTournament(){
     }
   }
   const totalMatches=t.levels.reduce((a,l)=>a+l.brackets.reduce((b,br)=>b+br.matches.length,0),0);
-  // Excel records
-  await syncStandings();await syncCrossover();await syncEndTournament();
-  // Firebase — mark ended + save summary so history shows correctly
+  if(!skipSave){await syncStandings();await syncCrossover();await syncEndTournament();}
   if(DB&&t){
     try{
       await DB.collection('tournaments').doc(t.id).update({
-        ended:true, endedAt:new Date().toISOString(), updatedAt:Date.now(),
-        champion, runnerUp, totalMatches
+        ended:true,endedAt:new Date().toISOString(),updatedAt:Date.now(),
+        champion,runnerUp,totalMatches
       });
     }catch(e){console.warn('fbEndTournament:',e.message);}
   }
   stopSubscriptions();
   S.endModal=false;S.tournament.ended=true;S.tournament=null;
   S.courts=[];S.numCourts=0;S.courtsSetup=false;S.matchQueue=[];
-  render();toast('Tournament ended and saved!','ok');
+  render();toast(skipSave?'Tournament force-ended.':'Tournament ended and saved!','ok');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1422,35 +1440,74 @@ function toggleUserPw(uid){
 }
 function renderHistory(){
   const h=S.history;
-  // History is superadmin-only — gate it
   if(S.role!=='superadmin'){
     return`<div class="empty"><div class="empty-i">🔒</div><div class="empty-t">Super Admin only</div></div>`;
   }
   return`<div>
     <div class="fbetween" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div class="title" style="font-size:20px">Tournament History</div>
-      <button class="btn btn-out btn-sm" onclick="fbLoadHistory().then(render)">↻ Refresh</button>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="btn btn-out btn-sm" onclick="fbLoadHistory().then(render)">↻ Refresh</button>
+        ${h.length?`<button class="btn btn-r btn-sm" onclick="deleteAllHistory()" title="Delete all history from Firebase">🗑 Clear All</button>`:''}
+      </div>
     </div>
-    ${!h.length?`<div class="empty"><div class="empty-i">📜</div><div class="empty-t">No history yet</div><div class="empty-s">Ended tournaments appear here</div></div>`:
-    `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--r);border:1px solid var(--border)">
-      <table class="htbl" style="min-width:600px">
-        <thead><tr>
-          <th>#</th><th>Tournament</th><th>Cat.</th><th>Players</th>
-          <th>Champion</th><th>Runner-Up</th><th>Matches</th><th>Date</th>
-        </tr></thead>
-        <tbody>${h.map((r,i)=>`<tr>
-          <td style="color:var(--text3);white-space:nowrap">${i+1}</td>
-          <td style="font-weight:700;white-space:nowrap">${r.name}</td>
-          <td><span class="badge bg-y">${r.category}</span></td>
-          <td style="text-align:center">${r.totalPlayers||'—'}</td>
-          <td style="color:var(--accent2);font-weight:700;white-space:nowrap">${r.champion||'—'}</td>
-          <td style="color:var(--text2);white-space:nowrap">${r.runnerUp||'—'}</td>
-          <td style="text-align:center">${r.totalMatches||'—'}</td>
-          <td style="font-size:11px;color:var(--text3);white-space:nowrap">${r.endedAt?new Date(r.endedAt).toLocaleDateString():r.createdAt?new Date(r.createdAt).toLocaleDateString():''}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-    </div>`}
+    ${!h.length
+      ?`<div class="empty"><div class="empty-i">📜</div><div class="empty-t">No history yet</div><div class="empty-s">Ended tournaments appear here</div></div>`
+      :`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--r);border:1px solid var(--border)">
+        <table class="htbl" style="min-width:620px">
+          <thead><tr>
+            <th>#</th><th>Tournament</th><th>Cat.</th><th>Players</th>
+            <th>Champion</th><th>Runner-Up</th><th>Matches</th><th>Date</th><th></th>
+          </tr></thead>
+          <tbody>${h.map((r,i)=>`<tr>
+            <td style="color:var(--text3);white-space:nowrap">${i+1}</td>
+            <td style="font-weight:700;white-space:nowrap">${r.name}</td>
+            <td><span class="badge bg-y">${r.category||'—'}</span></td>
+            <td style="text-align:center">${r.totalPlayers||'—'}</td>
+            <td style="color:var(--accent2);font-weight:700;white-space:nowrap">${r.champion||'—'}</td>
+            <td style="color:var(--text2);white-space:nowrap">${r.runnerUp||'—'}</td>
+            <td style="text-align:center">${r.totalMatches||'—'}</td>
+            <td style="font-size:11px;color:var(--text3);white-space:nowrap">${r.endedAt?new Date(r.endedAt).toLocaleDateString():r.createdAt?new Date(r.createdAt).toLocaleDateString():''}</td>
+            <td><button class="btn btn-r btn-xs" onclick="deleteHistoryEntry('${r.id}')" title="Delete this entry">✕</button></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`}
   </div>`;
+}
+
+async function deleteHistoryEntry(docId){
+  if(!confirm('Delete this tournament from history? This cannot be undone.')) return;
+  if(DB){
+    try{
+      await DB.collection('tournaments').doc(String(docId)).delete();
+      toast('Deleted from history','ok');
+    }catch(e){
+      // If docId is a number index from old local history, just remove locally
+      console.warn('FB delete failed:',e.message);
+    }
+  }
+  // Remove from local state too
+  S.history=S.history.filter(h=>String(h.id)!==String(docId));
+  render();
+}
+
+async function deleteAllHistory(){
+  if(!confirm('Delete ALL tournament history? This permanently removes all ended tournaments from Firebase.')) return;
+  if(DB){
+    try{
+      // Get all ended tournaments and delete them in batch
+      const snap=await DB.collection('tournaments').where('ended','==',true).get();
+      const batch=DB.batch();
+      snap.docs.forEach(d=>batch.delete(d.ref));
+      await batch.commit();
+      toast(`Deleted ${snap.docs.length} tournaments from Firebase`,'ok');
+    }catch(e){
+      toast('Firebase delete failed: '+e.message,'er');
+      console.warn(e);
+    }
+  }
+  S.history=[];S.historyLoaded=false;
+  render();
 }
 function openAddUser(){S.userModal={id:null,username:'',password:'',name:'',role:'admin'};render();}
 function editUser(id){const u=S.users.find(x=>x.id===id);S.userModal={...u,origId:id};render();}
@@ -1516,29 +1573,43 @@ function renderCreateTournament(){
     <div class="title" style="margin-bottom:4px">New Tournament</div>
     <div class="sub" style="margin-bottom:18px">Set up your tournament details</div>
     <div class="card" style="max-width:460px">
-      <div style="margin-bottom:10px"><label class="label">Tournament Name</label><input class="inp" id="t-name" placeholder="e.g. City Open 2025"/></div>
+      <div style="margin-bottom:10px">
+        <label class="label">Tournament Name</label>
+        <input class="inp" id="t-name" placeholder="e.g. City Open 2025"
+          value="${S._tName||''}"
+          oninput="S._tName=this.value"/>
+      </div>
       <div style="margin-bottom:10px"><label class="label">Category</label>
-        <div style="display:flex;gap:8px;margin-top:4px">${['Singles','Doubles'].map(c=>`<button class="btn ${S._tCat===c?'btn-y':'btn-out'}" onclick="S._tCat='${c}';render()">${c}</button>`).join('')}</div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          ${['Singles','Doubles'].map(c=>`<button class="btn ${S._tCat===c?'btn-y':'btn-out'}"
+            onclick="S._tName=document.getElementById('t-name')?.value||S._tName;S._tCat='${c}';render()">${c}</button>`).join('')}
+        </div>
       </div>
       <div style="margin-bottom:16px"><label class="label">Number of Courts</label>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
-          ${[1,2,3,4,5,6].map(n=>`<button class="btn ${S._numCourts===n?'btn-y':'btn-out'}" onclick="S._numCourts=${n};render()" style="min-width:40px">${n}</button>`).join('')}
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px">
+          ${[1,2,3,4,5,6].map(n=>`<button class="btn ${S._numCourts===n?'btn-y':'btn-out'}"
+            onclick="S._tName=document.getElementById('t-name')?.value||S._tName;S._numCourts=${n};render()" style="min-width:38px">${n}</button>`).join('')}
         </div>
-        ${S._numCourts?`<div style="font-size:11px;color:var(--text2);margin-top:5px">${S._numCourts} court${S._numCourts!==1?'s':''} will be created with editable names</div>`:''}
+        ${S._numCourts?`<div style="font-size:11px;color:var(--text2);margin-top:5px">${S._numCourts} court${S._numCourts!==1?'s':''} will be created</div>`:''}
       </div>
       <button class="btn btn-y" onclick="submitCreate()">Create Tournament →</button>
     </div>
   </div>`;
 }
 function submitCreate(){
-  const name=document.getElementById('t-name')?.value.trim();
-  if(!name){toast('Enter tournament name','er');return;}
+  const name=(S._tName||'').trim();
+  if(!name){toast('Enter tournament name','er');document.getElementById('t-name')?.focus();return;}
   if(!S._tCat){toast('Select category','er');return;}
   const nc=S._numCourts||1;
-  S.tournament={id:gid(),name,category:S._tCat,levels:[],crossover:null,created:new Date().toISOString()};
+  S.tournament={
+    id:gid(),name,category:S._tCat,levels:[],crossover:null,
+    created:new Date().toISOString(),
+    createdBy:S.user?.username||''
+  };
+  S._tName='';S._tCat=null;S._numCourts=2;
   initCourts(nc);
   render();toast('Tournament created!','ok');
-  fbPushTournament(); // push to Firebase so other devices see it
+  fbPushTournament();
 }
 // ── DRAFT INPUT BUFFERS ──────────────────────────────────
 // Stores unsaved textarea text per level so re-renders don't wipe inputs.
