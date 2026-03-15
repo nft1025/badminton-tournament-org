@@ -335,7 +335,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 // ═══════════════════════════════════════════════════════════
 
 // ── GOOGLE SHEETS (Apps Script) — for Excel recording ────
-const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbwwSWC8wopu6zQvUTI2JkJLx4CaWVOlLjgmOQeF6nFfZb9fN0WC8hPt61XVZg_2OxoQSA/exec';
+const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzdnFUHUwp3tEacOem6QF7uEk4GSXMEJYjiPArJMRkAEov-aKyhCdSbY9FyPsa7lHKF-Q/exec';
 
 // ── FIREBASE — paste your project values here ─────────────
 // Find them: Firebase Console → Project Settings → Your Apps → SDK setup (Config)
@@ -530,6 +530,7 @@ async function fbPushTournament(){
       crossover: t.crossover?JSON.stringify(t.crossover):null,
       ended: t.ended||false,
       createdBy: t.createdBy||'',
+      allowedScorers: t.allowedScorers||[],
       updatedAt: Date.now()
     });
   } catch(e){ console.warn('fbPushTournament:',e.message); }
@@ -689,7 +690,8 @@ async function fbLoadAllActiveTournaments(){
       numCourts:d.data().numCourts||1,
       created:d.data().created||'',
       updatedAt:d.data().updatedAt||0,
-      createdBy:d.data().createdBy||''
+      createdBy:d.data().createdBy||'',
+      allowedScorers:d.data().allowedScorers||[]
     }));
     results.sort((a,b)=>b.updatedAt-a.updatedAt);
     return results;
@@ -724,7 +726,8 @@ async function fbLoadTournamentById(tid){
       levels:JSON.parse(d.levels||'[]'),
       crossover:d.crossover?JSON.parse(d.crossover):null,
       ended:d.ended||false,
-      createdBy:d.createdBy||''
+      createdBy:d.createdBy||'',
+      allowedScorers:d.allowedScorers||[]
     };
     S.numCourts=d.numCourts||1;
     // Build courts with stable IDs matching what admin originally created
@@ -747,22 +750,32 @@ async function fbLoadTournamentById(tid){
   } catch(e){ console.warn('fbLoadTournamentById:',e.message); return false; }
 }
 
-// Legacy alias used by doLogin — filters by ownership for admin/scorer
+// Legacy alias used by doLogin — filters by ownership/access for admin/scorer
 async function fbLoadActiveTournament(){
   const list=await fbLoadAllActiveTournaments();
   if(!list.length) return false;
 
-  // Filter: admin & scorer only see their own tournaments; public & superadmin see all
-  const filtered = (S.role==='admin'||S.role==='scorer')
-    ? list.filter(t=>!t.createdBy||t.createdBy===S.user?.username)
-    : list;
-
-  // If none match ownership, show the unfiltered list (backwards compat for old tournaments with no createdBy)
-  const pool = filtered.length ? filtered : list;
-
-  if(pool.length===1){
-    return fbLoadTournamentById(pool[0].id);
+  let pool=list;
+  if(S.role==='admin'){
+    // Admin only sees tournaments they created
+    const own=list.filter(t=>!t.createdBy||t.createdBy===S.user?.username);
+    pool=own.length?own:list;
+  } else if(S.role==='scorer'){
+    // Scorer sees tournaments where they are explicitly allowed OR createdBy matches
+    const accessible=list.filter(t=>
+      !t.createdBy ||                                           // old tournament no ownership
+      t.createdBy===S.user?.username ||                        // scorer IS the admin (edge case)
+      (t.allowedScorers&&t.allowedScorers.includes(S.user?.username)) // explicitly granted
+    );
+    pool=accessible.length?accessible:[];
+    if(!pool.length){
+      toast('No tournaments assigned to your scorer account yet. Ask an admin to grant you access.','inf');
+      return false;
+    }
   }
+  // public & superadmin see all — pool stays as list
+
+  if(pool.length===1) return fbLoadTournamentById(pool[0].id);
   // Multiple — show picker
   S._activeTournamentList=pool;
   S._showTournamentPicker=true;
@@ -1173,9 +1186,100 @@ function renderHome(){
         `<div class="empty" style="padding:16px"><div class="empty-s">No matches queued</div></div>`}
       </div>
     </div>
+
+    <!-- Scorer Access Management -->
+    <div class="card" style="margin-top:14px">
+      <div class="fbetween" style="margin-bottom:12px">
+        <div>
+          <div style="font-weight:700;font-size:14px">📋 Scorer Access</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">Grant scorer accounts access to this tournament</div>
+        </div>
+      </div>
+      ${renderScorerAccessManager()}
+    </div>
   </div>`;
 }
 function getFinalist(){const t=S.tournament;if(!t||!t.crossover)return null;const f=t.crossover.stages.find(s=>s.name==='Final');if(!f)return null;const fm=f.matches[0];if(!fm||fm.status!=='finished')return null;return fmtPair(fm.winner?.pair,t);}
+
+function renderScorerAccessManager(){
+  const t=S.tournament;
+  if(!t) return '';
+  const allowed=t.allowedScorers||[];
+  // Get scorer accounts from local users list
+  const scorerAccounts=S.users.filter(u=>u.role==='scorer');
+  return`<div>
+    ${scorerAccounts.length===0&&allowed.length===0
+      ?`<div style="font-size:12px;color:var(--text3);margin-bottom:10px">No scorer accounts found. Add scorer accounts in Super Admin → User Management.</div>`
+      :''}
+
+    ${/* Show known scorer accounts */''}
+    ${scorerAccounts.map(u=>{
+        const isGranted=allowed.includes(u.username);
+        return`<div class="panel fbetween" style="margin-bottom:6px;padding:10px 12px">
+          <div>
+            <div style="font-size:13px;font-weight:600">${u.name}</div>
+            <div style="font-size:10px;color:var(--text3);font-family:monospace">${u.username}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="badge ${isGranted?'bg-g':'bg-n'}">${isGranted?'✓ Access':'No Access'}</span>
+            <button class="btn ${isGranted?'btn-r':'btn-g'} btn-xs"
+              onclick="${isGranted?`revokeScorerAccess('${u.username}')`:`grantScorerAccess('${u.username}')`}">
+              ${isGranted?'Revoke':'Grant'}
+            </button>
+          </div>
+        </div>`;
+      }).join('')}
+
+    ${/* Show manually-added scorers not in local user list */''}
+    ${allowed.filter(u=>!scorerAccounts.find(s=>s.username===u)).map(u=>`
+      <div class="panel fbetween" style="margin-bottom:6px;padding:10px 12px;border-color:rgba(91,156,246,.3)">
+        <div>
+          <div style="font-size:13px;font-weight:600">${u}</div>
+          <div style="font-size:10px;color:var(--accent3)">Manually granted</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge bg-g">✓ Access</span>
+          <button class="btn btn-r btn-xs" onclick="revokeScorerAccess('${u}')">Revoke</button>
+        </div>
+      </div>`).join('')}
+
+    <!-- Manual grant by username -->
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input class="inp inp-sm" id="scorer-grant-inp" placeholder="Scorer username…" style="flex:1"/>
+      <button class="btn btn-g btn-sm" onclick="grantScorerByInput()">+ Grant</button>
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-top:6px">
+      Granted scorers will automatically see this tournament when they log in from any device.
+    </div>
+  </div>`;
+}
+
+function grantScorerByInput(){
+  const inp=document.getElementById('scorer-grant-inp');
+  const username=(inp?.value||'').trim();
+  if(!username){toast('Enter a scorer username','er');return;}
+  grantScorerAccess(username);
+  if(inp) inp.value='';
+}
+
+function grantScorerAccess(username){
+  const t=S.tournament;if(!t)return;
+  if(!t.allowedScorers) t.allowedScorers=[];
+  if(!t.allowedScorers.includes(username)){
+    t.allowedScorers.push(username);
+    fbPushTournament();
+    toast(`Access granted to ${username}`,'ok');
+    render();
+  }
+}
+
+function revokeScorerAccess(username){
+  const t=S.tournament;if(!t)return;
+  t.allowedScorers=(t.allowedScorers||[]).filter(u=>u!==username);
+  fbPushTournament();
+  toast(`Access revoked for ${username}`,'ok');
+  render();
+}
 
 // ═══════════════════════════════════════════════════════════
 //  END TOURNAMENT MODAL
@@ -1604,7 +1708,8 @@ function submitCreate(){
   S.tournament={
     id:gid(),name,category:S._tCat,levels:[],crossover:null,
     created:new Date().toISOString(),
-    createdBy:S.user?.username||''
+    createdBy:S.user?.username||'',
+    allowedScorers:[]   // usernames of scorers granted access by the admin
   };
   S._tName='';S._tCat=null;S._numCourts=2;
   initCourts(nc);
@@ -2589,16 +2694,17 @@ function renderScorerBoard(court){
 function renderPublic(){
   const t=S.tournament;
   if(!t||!t.levels.length)return`<div class="empty"><div class="empty-i">🏸</div><div class="empty-t">No tournament data</div></div>`;
-  refreshStandings();const pt=S.pubTab||'standings';
+  refreshStandings();const pt=S.pubTab||'courts';
   return`<div>
     <div class="fbetween" style="margin-bottom:16px;flex-wrap:wrap;gap:10px">
       <div><div class="title">${t.name}</div><span class="badge bg-y" style="margin-top:4px">${t.category}</span></div>
       ${S.courts.some(c=>c.matchId)?`<span class="badge bg-g" style="font-size:11px;padding:5px 12px">● ${S.courts.filter(c=>c.matchId).length} Match${S.courts.filter(c=>c.matchId).length!==1?'es':''} Live</span>`:''}
     </div>
     <div class="tabs">
-      ${['courts','standings','matches','crossover'].map(tab=>`<div class="tab${pt===tab?' active':''}" onclick="S.pubTab='${tab}';render()">${tab.charAt(0).toUpperCase()+tab.slice(1)}</div>`).join('')}
+      ${['courts','queue','standings','matches','crossover'].map(tab=>`<div class="tab${pt===tab?' active':''}" onclick="S.pubTab='${tab}';render()">${tab.charAt(0).toUpperCase()+tab.slice(1)}</div>`).join('')}
     </div>
     ${pt==='courts'?renderPubCourts():''}
+    ${pt==='queue'?renderPubQueue():''}
     ${pt==='standings'?renderPubStandings():''}
     ${pt==='matches'?renderPubMatches():''}
     ${pt==='crossover'?renderPubCrossover():''}
@@ -2647,6 +2753,68 @@ function renderPubMatches(){
       </div>`).join('')}
     </div>`).join('')}
   </div>`).join('')}</div>`;
+}
+function renderPubQueue(){
+  const t=S.tournament;
+  if(!t) return`<div class="empty"><div class="empty-i">📋</div><div class="empty-t">No tournament loaded</div></div>`;
+  // Live courts
+  const liveCourts=S.courts.filter(c=>c.matchId);
+  const queue=S.matchQueue||[];
+  return`<div>
+    <!-- Live Now -->
+    ${liveCourts.length?`<div style="margin-bottom:18px">
+      <div style="font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">● On Court Now (${liveCourts.length})</div>
+      ${liveCourts.map(c=>{
+        const m=getCourtMatch(c);
+        if(!m)return'';
+        return`<div class="panel fbetween" style="margin-bottom:6px;border-color:rgba(61,214,140,.3);background:rgba(61,214,140,.04)">
+          <div>
+            <div style="font-size:10px;font-weight:700;color:var(--accent2);margin-bottom:3px">${c.name}</div>
+            <div style="font-size:14px;font-weight:700">${fmtPair(m.team1,t)} <span style="color:var(--text3);font-weight:400">vs</span> ${fmtPair(m.team2,t)}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--accent)">${c.liveScore.s1} — ${c.liveScore.s2}</div>
+            <span class="badge bg-g">● Live</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`:
+    `<div style="margin-bottom:16px;padding:14px;background:var(--surface2);border-radius:var(--rs);text-align:center;color:var(--text3);font-size:13px">No matches currently on court</div>`}
+
+    <!-- Queued Matches -->
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
+        Up Next — ${queue.length} match${queue.length!==1?'es':''} in queue
+      </div>
+      ${!queue.length
+        ?`<div class="empty" style="padding:24px"><div class="empty-i">📋</div>
+           <div class="empty-t">No matches queued yet</div>
+           <div class="empty-s">The organizer will add upcoming matches to the queue</div></div>`
+        :queue.map((q,i)=>{
+          // Guard: getBrMatch needs S.tournament to be loaded with levels
+          if(!S.tournament||!S.tournament.levels) return'';
+          let m=null,lvl=null,br=null;
+          try{
+            const res=getLvlAndBr(q.bracketId);
+            lvl=res.lvl; br=res.br;
+            if(br) m=br.matches.find(x=>x.id===q.matchId);
+          }catch(e){}
+          if(!m) return`<div class="panel" style="margin-bottom:6px;opacity:.5">
+            <div style="font-size:12px;color:var(--text3)">#${i+1} — Match loading…</div>
+          </div>`;
+          return`<div class="panel fbetween" style="margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--text3);min-width:30px;text-align:center">${i+1}</div>
+              <div>
+                <div style="font-size:13px;font-weight:600">${fmtPair(m.team1,t)} <span style="color:var(--text3)">vs</span> ${fmtPair(m.team2,t)}</div>
+                <div style="font-size:10px;color:var(--text3);margin-top:2px">${lvl?.name||''} · ${br?.label||''} · Round ${m.round||''}</div>
+              </div>
+            </div>
+            <span class="badge bg-b">#${i+1}</span>
+          </div>`;
+        }).join('')}
+    </div>
+  </div>`;
 }
 function renderPubCrossover(){
   if(!S.tournament?.crossover)return`<div class="empty"><div class="empty-i">🏆</div><div class="empty-t">Crossover not started</div></div>`;
