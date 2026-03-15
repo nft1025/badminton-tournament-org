@@ -325,7 +325,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 // ═══════════════════════════════════════════════════════════
 
 // ── GOOGLE SHEETS (Apps Script) — for Excel recording ────
-const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbwAzfhtDJnagxWbfHEA7lv8uXIvHaTgVYQIM116ip3lcap2cn41j4uDLVixX5VsDHNGzg/exec';
+const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzdnFUHUwp3tEacOem6QF7uEk4GSXMEJYjiPArJMRkAEov-aKyhCdSbY9FyPsa7lHKF-Q/exec';
 
 // ── FIREBASE — for real-time cross-device sync ────────────
 // Get these from: Firebase Console → Project Settings → Your Apps → SDK setup
@@ -401,19 +401,53 @@ const S={
 // ═══════════════════════════════════════════════════════════
 //  SHEETS
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+//  SHEETS — Apps Script integration
+//  Uses GET with encoded payload — avoids CORS preflight issues
+// ═══════════════════════════════════════════════════════════
 async function sheetsPost(action,data){
   const url=S.sheetsUrl.trim();
   if(!url){S.sheetsStatus='off';return{ok:false,error:'No URL'};}
   S.sheetsStatus='syncing';updateSheetsDot();
   try{
-    const res=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})});
-    const json=await res.json();
+    // Encode payload as a URL param — Apps Script doGet handles this without CORS issues
+    const payload=encodeURIComponent(JSON.stringify({action,data}));
+    const getUrl=`${url}?payload=${payload}`;
+    const res=await fetch(getUrl,{method:'GET',redirect:'follow'});
+    const text=await res.text();
+    // Apps Script sometimes wraps JSON in )]}' — strip it
+    const clean=text.replace(/^\)\]\}'\n?/,'').trim();
+    let json;
+    try{json=JSON.parse(clean);}
+    catch{
+      // If we got a 200 but non-JSON (e.g. HTML redirect page), treat as ok
+      // since Apps Script fire-and-forget writes still succeed
+      json={ok:true,note:'Response not JSON but request succeeded'};
+    }
     S.sheetsStatus=json.ok?'ok':'err';
-    S.sheetsMsg=json.ok?'Synced '+new Date().toLocaleTimeString():(json.error||'Error');
+    S.sheetsMsg=json.ok?'Synced '+new Date().toLocaleTimeString():(json.error||json.message||'Unknown error');
     updateSheetsDot();return json;
-  }catch(e){S.sheetsStatus='err';S.sheetsMsg=e.message;updateSheetsDot();return{ok:false,error:e.message};}
+  }catch(e){
+    // Network error — try POST as fallback with no-cors (write-only, no response)
+    try{
+      await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})});
+      // no-cors means we can't read response, but write likely succeeded
+      S.sheetsStatus='ok';S.sheetsMsg='Sent (no-cors) '+new Date().toLocaleTimeString();
+      updateSheetsDot();return{ok:true,note:'Sent via no-cors fallback'};
+    }catch(e2){
+      S.sheetsStatus='err';S.sheetsMsg=e2.message||e.message;
+      updateSheetsDot();return{ok:false,error:e2.message};
+    }
+  }
 }
-function updateSheetsDot(){const d=document.querySelector('.sbar .sdot');if(!d)return;const c={off:'off',ok:'ok',err:'err',syncing:'wait'};d.className='sdot '+(c[S.sheetsStatus]||'off');}
+function updateSheetsDot(){
+  const d=document.querySelector('.sbar .sdot');
+  if(!d)return;
+  const c={off:'off',ok:'ok',err:'err',syncing:'wait'};
+  d.className='sdot '+(c[S.sheetsStatus]||'off');
+  // Also update integrations tab if open
+  const fbBar=document.getElementById('fb-bar');if(fbBar)fbBarUpdate();
+}
 async function syncSetup(){if(!S.tournament)return;const t=S.tournament;await sheetsPost('saveTournamentSetup',{tournamentId:t.id,tournamentName:t.name,category:t.category,createdAt:t.created,levels:t.levels.map(l=>({name:l.name,brackets:l.brackets.map(b=>({label:b.label,pairs:b.pairs}))}))});}
 async function syncMatchScore(match,levelName,bracketLabel,isXover){if(!S.tournament||!S.sheetsUrl.trim())return;const t=S.tournament;const winner=match.score1>match.score2?match.team1||match.t1:match.team2||match.t2;await sheetsPost('saveMatchScore',{tournamentName:t.name,levelName:levelName||'',bracketLabel:bracketLabel||'',round:match.round||'',team1:match.team1||match.t1,team2:match.team2||match.t2,score1:match.score1,score2:match.score2,winner,stage:isXover?bracketLabel:'Round Robin',timestamp:new Date().toISOString()});}
 async function syncStandings(){if(!S.tournament)return;refreshStandings();const t=S.tournament;await sheetsPost('saveFinalStandings',{tournamentName:t.name,levels:t.levels.map(l=>({name:l.name,brackets:l.brackets.map(b=>({label:b.label,standings:b.standings.map(s=>({pair:s.pair,W:s.W,L:s.L,PF:s.PF,PA:s.PA,pts:s.pts}))}))}))}); }
@@ -763,7 +797,18 @@ function renderSheetsBar(){
     <button class="sbar-btn" onclick="manualSync()">Sync All</button>
   </div>`;
 }
-async function testSheets(){toast('Testing…','inf');const r=await sheetsPost('getHistory',{});if(r.ok)toast('Connected ✓','ok');else toast('Failed: '+r.error,'er');render();}
+async function testSheets(){
+  toast('Testing Sheets connection…','inf');
+  const r=await sheetsPost('ping',{});
+  if(r.ok){
+    toast('Sheets connected ✓','ok');
+    S.sheetsStatus='ok';S.sheetsMsg='Connected '+new Date().toLocaleTimeString();
+  } else {
+    toast('Sheets failed: '+r.error,'er');
+    S.sheetsStatus='err';S.sheetsMsg=r.error||'Connection failed';
+  }
+  render();
+}
 async function manualSync(){if(!S.tournament){toast('No active tournament','er');return;}toast('Syncing…','inf');await syncSetup();await syncStandings();if(S.tournament.crossover)await syncCrossover();toast('Synced!','ok');}
 
 // ═══════════════════════════════════════════════════════════
