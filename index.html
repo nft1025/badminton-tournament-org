@@ -431,6 +431,9 @@ const S={
   dragSrc:null,
   history:[],historyLoaded:false,
   editingCourtId:null,
+  activeTournamentId:null,
+  _activeTournamentList:[],
+  _showTournamentPicker:false,
   _loginRole:'admin',_loginErr:'',_tCat:null,_saTab:'users',
   users:[
     {id:1,username:'admin',password:'admin123',role:'admin',name:'Tournament Admin'},
@@ -450,35 +453,37 @@ async function sheetsPost(action,data){
   const url=S.sheetsUrl.trim();
   if(!url){S.sheetsStatus='off';return{ok:false,error:'No URL'};}
   S.sheetsStatus='syncing';updateSheetsDot();
-  try{
-    // Encode payload as a URL param — Apps Script doGet handles this without CORS issues
-    const payload=encodeURIComponent(JSON.stringify({action,data}));
-    const getUrl=`${url}?payload=${payload}`;
-    const res=await fetch(getUrl,{method:'GET',redirect:'follow'});
-    const text=await res.text();
-    // Apps Script sometimes wraps JSON in )]}' — strip it
-    const clean=text.replace(/^\)\]\}'\n?/,'').trim();
-    let json;
-    try{json=JSON.parse(clean);}
-    catch{
-      // If we got a 200 but non-JSON (e.g. HTML redirect page), treat as ok
-      // since Apps Script fire-and-forget writes still succeed
-      json={ok:true,note:'Response not JSON but request succeeded'};
-    }
-    S.sheetsStatus=json.ok?'ok':'err';
-    S.sheetsMsg=json.ok?'Synced '+new Date().toLocaleTimeString():(json.error||json.message||'Unknown error');
-    updateSheetsDot();return json;
-  }catch(e){
-    // Network error — try POST as fallback with no-cors (write-only, no response)
+  const body=JSON.stringify({action,data});
+
+  // Use GET for small payloads (< 2000 chars, avoids CORS preflight)
+  // Use no-cors POST for large payloads (tournament setup with many players)
+  if(body.length<1800){
     try{
-      await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data})});
-      // no-cors means we can't read response, but write likely succeeded
-      S.sheetsStatus='ok';S.sheetsMsg='Sent (no-cors) '+new Date().toLocaleTimeString();
-      updateSheetsDot();return{ok:true,note:'Sent via no-cors fallback'};
-    }catch(e2){
-      S.sheetsStatus='err';S.sheetsMsg=e2.message||e.message;
-      updateSheetsDot();return{ok:false,error:e2.message};
+      const payload=encodeURIComponent(body);
+      const res=await fetch(`${url}?payload=${payload}`,{method:'GET',redirect:'follow'});
+      const text=await res.text();
+      const clean=text.replace(/^\)\]\}'\n?/,'').trim();
+      let json;
+      try{json=JSON.parse(clean);}
+      catch{json={ok:true,note:'non-JSON response'};}
+      S.sheetsStatus=json.ok?'ok':'err';
+      S.sheetsMsg=json.ok?'Synced '+new Date().toLocaleTimeString():(json.error||'Error');
+      updateSheetsDot();return json;
+    }catch(e){
+      // Fall through to POST
     }
+  }
+
+  // POST (no-cors) for large payloads — write-only, no response read
+  try{
+    await fetch(url,{method:'POST',mode:'no-cors',body});
+    S.sheetsStatus='ok';
+    S.sheetsMsg='Sent '+new Date().toLocaleTimeString();
+    updateSheetsDot();
+    return{ok:true,note:'Sent via POST'};
+  }catch(e){
+    S.sheetsStatus='err';S.sheetsMsg=e.message;
+    updateSheetsDot();return{ok:false,error:e.message};
   }
 }
 function updateSheetsDot(){
@@ -486,8 +491,6 @@ function updateSheetsDot(){
   if(!d)return;
   const c={off:'off',ok:'ok',err:'err',syncing:'wait'};
   d.className='sdot '+(c[S.sheetsStatus]||'off');
-  // Also update integrations tab if open
-  const fbBar=document.getElementById('fb-bar');if(fbBar)fbBarUpdate();
 }
 async function syncSetup(){if(!S.tournament)return;const t=S.tournament;await sheetsPost('saveTournamentSetup',{tournamentId:t.id,tournamentName:t.name,category:t.category,createdAt:t.created,levels:t.levels.map(l=>({name:l.name,brackets:l.brackets.map(b=>({label:b.label,pairs:b.pairs}))}))});}
 async function syncMatchScore(match,levelName,bracketLabel,isXover){if(!S.tournament||!S.sheetsUrl.trim())return;const t=S.tournament;const winner=match.score1>match.score2?match.team1||match.t1:match.team2||match.t2;await sheetsPost('saveMatchScore',{tournamentName:t.name,levelName:levelName||'',bracketLabel:bracketLabel||'',round:match.round||'',team1:match.team1||match.t1,team2:match.team2||match.t2,score1:match.score1,score2:match.score2,winner,stage:isXover?bracketLabel:'Round Robin',timestamp:new Date().toISOString()});}
@@ -513,7 +516,8 @@ async function fbPushTournament(){
     await DB.collection('tournaments').doc(t.id).set({
       id:t.id, name:t.name, category:t.category, created:t.created,
       numCourts:S.numCourts,
-      levels: JSON.stringify(t.levels),   // full levels/brackets/matches as JSON string
+      courts:JSON.stringify(S.courts), // include court IDs/names so other devices use same IDs
+      levels: JSON.stringify(t.levels),
       crossover: t.crossover?JSON.stringify(t.crossover):null,
       ended: t.ended||false,
       updatedAt: Date.now()
@@ -555,23 +559,31 @@ async function fbPushCrossover(){
 
 // ── SUBSCRIBE helpers ─────────────────────────────────────
 
-// Subscribe to courts/queue live doc — used by all roles to see live court state
+// Subscribe to courts/queue live doc — all roles see live court state
 function fbSubscribeCourts(tid){
   if(!DB)return;
-  stopSubscriptions();
   const unsub = DB.collection('tournaments').doc(tid)
     .collection('live').doc('courts')
     .onSnapshot(snap=>{
       if(!snap.exists)return;
       const d=snap.data();
       try {
-        const courts=JSON.parse(d.courts||'[]');
+        const remoteCourts=JSON.parse(d.courts||'[]');
         const queue=JSON.parse(d.queue||'[]');
-        // Merge remote courts into local (preserve name edits, only update matchId/liveScore)
-        courts.forEach(rc=>{
-          const lc=S.courts.find(c=>c.id===rc.id);
-          if(lc){lc.matchId=rc.matchId;lc.bracketId=rc.bracketId;lc.levelId=rc.levelId;lc.liveScore={...rc.liveScore};}
-        });
+        if(remoteCourts.length){
+          // For admin: merge only liveScore + matchId (preserve local name edits)
+          // For scorer/public: replace entirely
+          if(S.role==='admin'||S.role==='superadmin'){
+            remoteCourts.forEach(rc=>{
+              const lc=S.courts.find(c=>c.id===rc.id);
+              if(lc){lc.matchId=rc.matchId;lc.bracketId=rc.bracketId;lc.levelId=rc.levelId;lc.liveScore={...rc.liveScore};}
+              else S.courts.push({...rc}); // new court added by admin on another device
+            });
+          } else {
+            // Scorer/public: fully replace
+            S.courts=remoteCourts.map(c=>({...c,liveScore:c.liveScore||{s1:0,s2:0}}));
+          }
+        }
         S.matchQueue=queue;
         render();
       } catch(e){ console.warn('fbSubscribeCourts parse:',e.message); }
@@ -579,33 +591,40 @@ function fbSubscribeCourts(tid){
   _unsubscribes.push(unsub);
 }
 
-// Subscribe to tournament doc (levels, matches, brackets) — used by public + scorer
+// Subscribe to tournament doc — all roles update
 function fbSubscribeTournament(tid){
   if(!DB)return;
   const unsub = DB.collection('tournaments').doc(tid)
     .onSnapshot(snap=>{
       if(!snap.exists)return;
       const d=snap.data();
-      // Only apply if the update came from another device (don't overwrite admin's own local state)
-      if(S.role==='public'||S.role==='scorer'){
-        try{
-          S.tournament={
-            id:d.id, name:d.name, category:d.category, created:d.created,
-            levels:JSON.parse(d.levels||'[]'),
-            crossover:d.crossover?JSON.parse(d.crossover):null,
-            ended:d.ended||false
-          };
+      try{
+        const updated={
+          id:d.id||tid, name:d.name, category:d.category, created:d.created,
+          levels:JSON.parse(d.levels||'[]'),
+          crossover:d.crossover?JSON.parse(d.crossover):null,
+          ended:d.ended||false
+        };
+        // Admin: only update levels/crossover (don't overwrite local courts/queue)
+        if(S.role==='admin'||S.role==='superadmin'){
+          if(S.tournament){
+            S.tournament.levels=updated.levels;
+            S.tournament.crossover=updated.crossover;
+            S.tournament.ended=updated.ended;
+          }
+        } else {
+          // Scorer/public: full replace
+          S.tournament=updated;
           S.numCourts=d.numCourts||S.courts.length;
-          // Rebuild courts array if needed
           if(S.courts.length===0&&d.numCourts){
             S.courts=[];
             for(let i=0;i<d.numCourts;i++)
-              S.courts.push({id:'court-'+(i+1),name:'Court '+(i+1),matchId:null,bracketId:null,levelId:null,liveScore:{s1:0,s2:0}});
+              S.courts.push({id:'c'+(i+1),name:'Court '+(i+1),matchId:null,bracketId:null,levelId:null,liveScore:{s1:0,s2:0}});
           }
           S.courtsSetup=true;
-          render();
-        }catch(e){ console.warn('fbSubscribeTournament parse:',e.message); }
-      }
+        }
+        render();
+      }catch(e){ console.warn('fbSubscribeTournament parse:',e.message); }
     }, e=>{ console.warn('fbSubscribeTournament err:',e.message); });
   _unsubscribes.push(unsub);
 }
@@ -631,32 +650,71 @@ function stopSubscriptions(){
   _unsubscribes=[];
 }
 
-// Load active tournament for non-admin roles on login
-async function fbLoadActiveTournament(){
-  if(!DB)return false;
+// Load ALL active (non-ended) tournaments — shows picker if multiple
+async function fbLoadAllActiveTournaments(){
+  if(!DB)return [];
   try {
     const snap=await DB.collection('tournaments')
       .where('ended','==',false)
       .orderBy('updatedAt','desc')
-      .limit(1).get();
-    if(snap.empty)return false;
-    const d=snap.docs[0].data();
+      .limit(10).get();
+    if(snap.empty) return [];
+    return snap.docs.map(d=>({
+      id:d.id, name:d.data().name||'Unnamed',
+      category:d.data().category||'',
+      numCourts:d.data().numCourts||1,
+      created:d.data().created||'',
+      updatedAt:d.data().updatedAt||0,
+      raw:d.data()
+    }));
+  } catch(e){ console.warn('fbLoadAllActive:',e.message); return []; }
+}
+
+// Load a specific tournament by ID and start subscriptions
+async function fbLoadTournamentById(tid){
+  if(!DB)return false;
+  try {
+    const doc=await DB.collection('tournaments').doc(tid).get();
+    if(!doc.exists)return false;
+    const d=doc.data();
     S.tournament={
-      id:d.id,name:d.name,category:d.category,created:d.created,
+      id:d.id||tid, name:d.name, category:d.category, created:d.created,
       levels:JSON.parse(d.levels||'[]'),
       crossover:d.crossover?JSON.parse(d.crossover):null,
       ended:d.ended||false
     };
     S.numCourts=d.numCourts||1;
-    S.courts=[];
-    for(let i=0;i<S.numCourts;i++)
-      S.courts.push({id:'court-'+(i+1),name:'Court '+(i+1),matchId:null,bracketId:null,levelId:null,liveScore:{s1:0,s2:0}});
+    // Build courts with stable IDs matching what admin originally created
+    const savedCourts = d.courts ? JSON.parse(d.courts) : null;
+    if(savedCourts&&savedCourts.length){
+      // Use the same court objects admin created (preserves IDs and names)
+      S.courts=savedCourts.map(c=>({...c, liveScore:c.liveScore||{s1:0,s2:0}}));
+    } else {
+      S.courts=[];
+      for(let i=0;i<S.numCourts;i++)
+        S.courts.push({id:'c'+(i+1),name:'Court '+(i+1),matchId:null,bracketId:null,levelId:null,liveScore:{s1:0,s2:0}});
+    }
     S.courtsSetup=true;
-    fbSubscribeTournament(d.id);
-    fbSubscribeCourts(d.id);
-    fbSubscribeCrossover(d.id);
+    stopSubscriptions();
+    fbSubscribeTournament(tid);
+    fbSubscribeCourts(tid);
+    fbSubscribeCrossover(tid);
+    S.activeTournamentId=tid;
     return true;
-  } catch(e){ console.warn('fbLoadActiveTournament:',e.message); return false; }
+  } catch(e){ console.warn('fbLoadTournamentById:',e.message); return false; }
+}
+
+// Legacy alias used by doLogin
+async function fbLoadActiveTournament(){
+  const list=await fbLoadAllActiveTournaments();
+  if(!list.length) return false;
+  if(list.length===1){
+    return fbLoadTournamentById(list[0].id);
+  }
+  // Multiple — show picker
+  S._activeTournamentList=list;
+  S._showTournamentPicker=true;
+  return false; // caller will render the picker
 }
 
 // Load all past tournaments for history view (super admin)
@@ -800,6 +858,7 @@ function render(){
     ${S.crossScoreModal?renderCrossScoreModal():''}
     ${S.userModal?renderUserModal():''}
     ${S.endModal?renderEndModal():''}
+    ${S._showTournamentPicker?renderTournamentPicker():''}
   `;
 }
 
@@ -812,12 +871,72 @@ function renderFbBar(){
     err:'Firebase error: '+FB_MSG
   };
   const col={off:'var(--text3)',connecting:'var(--accent)',on:'var(--accent2)',err:'var(--danger)'};
+  const tName=S.tournament?.name;
   return `<div class="fb-bar" id="fb-bar">
     <div class="fb-dot ${cls[FB_STATUS]||'off'}"></div>
     <span class="fb-label" style="color:${col[FB_STATUS]||'var(--text3)'}">${lbl[FB_STATUS]||''}</span>
-    ${FB_STATUS==='off'?`<span style="color:var(--text3);font-size:10px">— Configure Firebase in Super Admin → Integrations to enable cross-device sync</span>`:''}
+    ${tName?`<span style="color:var(--text2);font-size:10px;font-weight:600">· ${tName}</span>`:''}
+    ${FB_STATUS==='on'&&DB?`<button class="sbar-btn" onclick="openTournamentPicker()" title="Switch tournament">⇄ Switch</button>`:''}
+    ${FB_STATUS==='off'?`<span style="color:var(--text3);font-size:10px">— Configure Firebase in Super Admin → Integrations</span>`:''}
     ${FB_STATUS==='err'?`<button class="sbar-btn" onclick="fbInit()">Reconnect</button>`:''}
   </div>`;
+}
+
+function renderTournamentPicker(){
+  const list=S._activeTournamentList||[];
+  return`<div class="overlay" onclick="if(S.tournament)S._showTournamentPicker=false,render()">
+    <div class="modal" style="max-width:520px" onclick="event.stopPropagation()">
+      <div class="modal-title">🏸 Select Tournament</div>
+      ${!list.length?`<div class="empty" style="padding:20px">
+        <div class="empty-i">📋</div>
+        <div class="empty-t">No active tournaments found</div>
+        <div class="empty-s">Ask the admin to create a tournament first</div>
+      </div>`:`
+      <div style="font-size:12px;color:var(--text2);margin-bottom:14px">${list.length} active tournament${list.length!==1?'s':''} found. Select one to view:</div>
+      ${list.map(t=>`
+        <div class="panel" style="cursor:pointer;transition:border .2s;border:1px solid var(--border);margin-bottom:8px"
+          onmouseover="this.style.borderColor='var(--accent)'"
+          onmouseout="this.style.borderColor='var(--border)'"
+          onclick="selectTournament('${t.id}')">
+          <div class="fbetween">
+            <div>
+              <div style="font-weight:700;font-size:15px">${t.name}</div>
+              <div style="display:flex;gap:6px;margin-top:4px">
+                <span class="badge bg-y">${t.category}</span>
+                <span class="badge bg-b">${t.numCourts} court${t.numCourts!==1?'s':''}</span>
+                <span class="badge bg-g">Active</span>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text3);text-align:right">
+              ${t.created?new Date(t.created).toLocaleDateString():''}
+            </div>
+          </div>
+        </div>
+      `).join('')}
+      `}
+      ${S.tournament?`<div style="display:flex;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-out" onclick="S._showTournamentPicker=false;render()">Keep current</button>
+      </div>`:''}
+    </div>
+  </div>`;
+}
+
+async function openTournamentPicker(){
+  toast('Loading tournaments…','inf');
+  const list=await fbLoadAllActiveTournaments();
+  S._activeTournamentList=list;
+  S._showTournamentPicker=true;
+  render();
+}
+
+async function selectTournament(tid){
+  S._showTournamentPicker=false;
+  S._activeTournamentList=[];
+  toast('Loading tournament…','inf');
+  const ok=await fbLoadTournamentById(tid);
+  if(ok){ toast('Tournament loaded!','ok'); }
+  else { toast('Failed to load tournament','er'); }
+  render();
 }
 function ST(t){S.adminTab=t;if(t==='super-admin'&&!S.historyLoaded)fbLoadHistory().then(render);else render();}
 function logout(){stopSubscriptions();S.user=null;S.role=null;S.adminTab='home';render();}
@@ -889,11 +1008,9 @@ function doLogin(){
   if(role==='public'){
     S.user={name:'Public Viewer'};S.role='public';S.adminTab='public-view';
     render();
-    // Load live tournament from Firebase
     if(DB){
       fbLoadActiveTournament().then(found=>{
-        if(!found){toast('No active tournament found','inf');}
-        render();
+        render(); // re-render whether picker or loaded
       });
     }
     return;
@@ -903,16 +1020,18 @@ function doLogin(){
   if(!found){S._loginErr='Invalid credentials';render();return;}
   S.user=found;S.role=role;S.adminTab=role==='superadmin'?'home':role==='scorer'?'scorer':'home';
   render();
-  // Scorer: load live tournament + subscribe to live courts
-  if(role==='scorer'&&DB){
-    fbLoadActiveTournament().then(found=>{
-      if(found) render();
-      else toast('No active tournament in Firebase','inf');
+  if(DB){
+    fbLoadActiveTournament().then(loaded=>{
+      if(!loaded&&!S._showTournamentPicker){
+        if(role==='scorer') toast('No active tournament in Firebase — ask admin to create one','inf');
+      }
+      // For admin/superadmin: also start listening to courts if tournament already loaded locally
+      if((role==='admin'||role==='superadmin')&&S.tournament&&S.tournament.id){
+        fbSubscribeCourts(S.tournament.id);
+        fbSubscribeTournament(S.tournament.id);
+      }
+      render();
     });
-  }
-  // Admin: start Firebase subscriptions for live courts so home page stays in sync
-  if((role==='admin'||role==='superadmin')&&S.tournament&&DB){
-    fbSubscribeCourts(S.tournament.id);
   }
 }
 
@@ -1311,25 +1430,34 @@ function toggleUserPw(uid){
 }
 function renderHistory(){
   const h=S.history;
+  // History is superadmin-only — gate it
+  if(S.role!=='superadmin'){
+    return`<div class="empty"><div class="empty-i">🔒</div><div class="empty-t">Super Admin only</div></div>`;
+  }
   return`<div>
-    <div class="fbetween" style="margin-bottom:14px">
+    <div class="fbetween" style="margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div class="title" style="font-size:20px">Tournament History</div>
       <button class="btn btn-out btn-sm" onclick="fbLoadHistory().then(render)">↻ Refresh</button>
     </div>
     ${!h.length?`<div class="empty"><div class="empty-i">📜</div><div class="empty-t">No history yet</div><div class="empty-s">Ended tournaments appear here</div></div>`:
-    `<div class="card"><table class="htbl">
-      <thead><tr><th>#</th><th>Tournament</th><th>Category</th><th>Players</th><th>Champion</th><th>Runner-Up</th><th>Matches</th><th>Date</th></tr></thead>
-      <tbody>${h.map((r,i)=>`<tr>
-        <td style="color:var(--text3)">${i+1}</td>
-        <td style="font-weight:700">${r.name}</td>
-        <td><span class="badge bg-y">${r.category}</span></td>
-        <td>${r.totalPlayers}</td>
-        <td style="color:var(--accent2);font-weight:700">${r.champion||'—'}</td>
-        <td style="color:var(--text2)">${r.runnerUp||'—'}</td>
-        <td>${r.totalMatches}</td>
-        <td style="font-size:11px;color:var(--text3)">${r.endedAt?new Date(r.endedAt).toLocaleDateString():''}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>`}
+    `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--r);border:1px solid var(--border)">
+      <table class="htbl" style="min-width:600px">
+        <thead><tr>
+          <th>#</th><th>Tournament</th><th>Cat.</th><th>Players</th>
+          <th>Champion</th><th>Runner-Up</th><th>Matches</th><th>Date</th>
+        </tr></thead>
+        <tbody>${h.map((r,i)=>`<tr>
+          <td style="color:var(--text3);white-space:nowrap">${i+1}</td>
+          <td style="font-weight:700;white-space:nowrap">${r.name}</td>
+          <td><span class="badge bg-y">${r.category}</span></td>
+          <td style="text-align:center">${r.totalPlayers||'—'}</td>
+          <td style="color:var(--accent2);font-weight:700;white-space:nowrap">${r.champion||'—'}</td>
+          <td style="color:var(--text2);white-space:nowrap">${r.runnerUp||'—'}</td>
+          <td style="text-align:center">${r.totalMatches||'—'}</td>
+          <td style="font-size:11px;color:var(--text3);white-space:nowrap">${r.endedAt?new Date(r.endedAt).toLocaleDateString():r.createdAt?new Date(r.createdAt).toLocaleDateString():''}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`}
   </div>`;
 }
 function openAddUser(){S.userModal={id:null,username:'',password:'',name:'',role:'admin'};render();}
