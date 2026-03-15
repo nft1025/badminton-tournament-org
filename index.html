@@ -32,8 +32,10 @@ button,input,select,textarea{font-family:'Barlow',sans-serif}
 .logout-btn{background:none;border:1px solid var(--border);color:var(--text2);font-size:11px;padding:3px 9px;border-radius:20px;cursor:pointer;transition:all .2s}
 .logout-btn:hover{border-color:var(--danger);color:var(--danger)}
 
-/* SHEETS BAR */
-.sbar{background:#1d2235;border-bottom:1px solid var(--border);padding:5px 16px;display:flex;align-items:center;gap:10px;font-size:11px;flex-wrap:wrap}
+/* FIREBASE STATUS */
+.fb-bar{background:#0d1829;border-bottom:1px solid var(--border);padding:4px 16px;display:flex;align-items:center;gap:10px;font-size:11px;flex-wrap:wrap}
+.fb-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.fb-dot.on{background:var(--accent2)}.fb-dot.off{background:var(--text3)}.fb-dot.err{background:var(--danger)}.fb-dot.sync{background:var(--accent);animation:pulse 1s infinite}
 .sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .3s}
 .sdot.ok{background:var(--accent2)}.sdot.err{background:var(--danger)}
 .sdot.wait{background:var(--accent);animation:pulse 1s infinite}.sdot.off{background:var(--text3)}
@@ -310,15 +312,63 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
   .scoreboard.fs-mode .big-score{font-size:120px}
 }
 </style>
+<!-- Firebase SDK (compat mode — works as plain scripts, no bundler needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div id="app"></div>
 <div class="toast-wrap" id="toasts"></div>
 <script>
 // ═══════════════════════════════════════════════════════════
-//  CONFIG
+//  CONFIG — paste your values here
 // ═══════════════════════════════════════════════════════════
+
+// ── GOOGLE SHEETS (Apps Script) — for Excel recording ────
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzdnFUHUwp3tEacOem6QF7uEk4GSXMEJYjiPArJMRkAEov-aKyhCdSbY9FyPsa7lHKF-Q/exec';
+
+// ── FIREBASE — for real-time cross-device sync ────────────
+// Get these from: Firebase Console → Project Settings → Your Apps → SDK setup
+const FB_CONFIG = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+
+// ── Firebase init ─────────────────────────────────────────
+let DB = null;   // Firestore instance — null until init
+let FB_STATUS = 'off'; // off | connecting | on | err
+let FB_MSG = '';
+let _unsubscribes = []; // active Firestore listeners to clean up
+
+function fbInit(){
+  try {
+    if(!FB_CONFIG.apiKey||FB_CONFIG.apiKey==='YOUR_API_KEY'){
+      FB_STATUS='off'; FB_MSG='Not configured'; fbBarUpdate(); return;
+    }
+    if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+    DB = firebase.firestore();
+    FB_STATUS='connecting'; FB_MSG='Connecting…'; fbBarUpdate();
+    // Test connection with a lightweight read
+    DB.collection('_ping').doc('test').set({t:Date.now()})
+      .then(()=>{FB_STATUS='on';FB_MSG='Connected';fbBarUpdate();toast('Firebase connected ✓','ok');})
+      .catch(e=>{FB_STATUS='err';FB_MSG=e.message;fbBarUpdate();});
+  } catch(e){
+    FB_STATUS='err'; FB_MSG=e.message; fbBarUpdate();
+  }
+}
+
+function fbBarUpdate(){
+  const bar=document.getElementById('fb-bar');
+  if(!bar)return;
+  const cls={off:'off',connecting:'sync',on:'on',err:'err'};
+  const lbl={off:'Firebase: Not configured',connecting:'Firebase: Connecting…',on:'Firebase: '+FB_MSG,err:'Firebase: Error — '+FB_MSG};
+  bar.querySelector('.fb-dot').className='fb-dot '+(cls[FB_STATUS]||'off');
+  bar.querySelector('.fb-label').textContent=lbl[FB_STATUS]||'';
+}
 
 // ═══════════════════════════════════════════════════════════
 //  STATE
@@ -372,8 +422,185 @@ async function syncEndTournament(){const t=S.tournament;if(!t)return;let champio
 async function loadHistory(){if(!S.sheetsUrl.trim()){S.historyLoaded=true;return;}const res=await sheetsPost('getHistory',{});if(res.ok&&res.history){S.history=res.history.reverse();S.historyLoaded=true;}}
 
 // ═══════════════════════════════════════════════════════════
-//  UTILS
+//  FIREBASE SYNC — real-time cross-device state
 // ═══════════════════════════════════════════════════════════
+
+// ── Tournament ID used as Firestore document path ─────────
+function getTid(){ return S.tournament?.id||null; }
+
+// ── WRITE helpers ─────────────────────────────────────────
+
+// Push entire tournament state to Firestore (called after setup, bracket gen)
+async function fbPushTournament(){
+  if(!DB||!S.tournament)return;
+  const t=S.tournament;
+  try {
+    await DB.collection('tournaments').doc(t.id).set({
+      id:t.id, name:t.name, category:t.category, created:t.created,
+      numCourts:S.numCourts,
+      levels: JSON.stringify(t.levels),   // full levels/brackets/matches as JSON string
+      crossover: t.crossover?JSON.stringify(t.crossover):null,
+      ended: t.ended||false,
+      updatedAt: Date.now()
+    });
+  } catch(e){ console.warn('fbPushTournament:',e.message); }
+}
+
+// Push courts state (live scores + assignments) — called after every score update
+async function fbPushCourts(){
+  if(!DB||!getTid())return;
+  try {
+    await DB.collection('tournaments').doc(getTid()).collection('live').doc('courts').set({
+      courts: JSON.stringify(S.courts),
+      queue:  JSON.stringify(S.matchQueue),
+      updatedAt: Date.now()
+    });
+  } catch(e){ console.warn('fbPushCourts:',e.message); }
+}
+
+// Push a single finished match score (lightweight, for real-time score updates)
+async function fbPushMatchScore(matchId,brId,s1,s2,status){
+  if(!DB||!getTid())return;
+  try {
+    await DB.collection('tournaments').doc(getTid())
+      .collection('matches').doc(matchId).set({matchId,brId,s1,s2,status,updatedAt:Date.now()});
+  } catch(e){ console.warn('fbPushMatchScore:',e.message); }
+}
+
+// Push crossover state
+async function fbPushCrossover(){
+  if(!DB||!getTid()||!S.tournament?.crossover)return;
+  try {
+    await DB.collection('tournaments').doc(getTid()).collection('live').doc('crossover').set({
+      crossover: JSON.stringify(S.tournament.crossover),
+      updatedAt: Date.now()
+    });
+  } catch(e){ console.warn('fbPushCrossover:',e.message); }
+}
+
+// ── SUBSCRIBE helpers ─────────────────────────────────────
+
+// Subscribe to courts/queue live doc — used by all roles to see live court state
+function fbSubscribeCourts(tid){
+  if(!DB)return;
+  stopSubscriptions();
+  const unsub = DB.collection('tournaments').doc(tid)
+    .collection('live').doc('courts')
+    .onSnapshot(snap=>{
+      if(!snap.exists)return;
+      const d=snap.data();
+      try {
+        const courts=JSON.parse(d.courts||'[]');
+        const queue=JSON.parse(d.queue||'[]');
+        // Merge remote courts into local (preserve name edits, only update matchId/liveScore)
+        courts.forEach(rc=>{
+          const lc=S.courts.find(c=>c.id===rc.id);
+          if(lc){lc.matchId=rc.matchId;lc.bracketId=rc.bracketId;lc.levelId=rc.levelId;lc.liveScore={...rc.liveScore};}
+        });
+        S.matchQueue=queue;
+        render();
+      } catch(e){ console.warn('fbSubscribeCourts parse:',e.message); }
+    }, e=>{ FB_STATUS='err';FB_MSG=e.message;fbBarUpdate(); });
+  _unsubscribes.push(unsub);
+}
+
+// Subscribe to tournament doc (levels, matches, brackets) — used by public + scorer
+function fbSubscribeTournament(tid){
+  if(!DB)return;
+  const unsub = DB.collection('tournaments').doc(tid)
+    .onSnapshot(snap=>{
+      if(!snap.exists)return;
+      const d=snap.data();
+      // Only apply if the update came from another device (don't overwrite admin's own local state)
+      if(S.role==='public'||S.role==='scorer'){
+        try{
+          S.tournament={
+            id:d.id, name:d.name, category:d.category, created:d.created,
+            levels:JSON.parse(d.levels||'[]'),
+            crossover:d.crossover?JSON.parse(d.crossover):null,
+            ended:d.ended||false
+          };
+          S.numCourts=d.numCourts||S.courts.length;
+          // Rebuild courts array if needed
+          if(S.courts.length===0&&d.numCourts){
+            S.courts=[];
+            for(let i=0;i<d.numCourts;i++)
+              S.courts.push({id:'court-'+(i+1),name:'Court '+(i+1),matchId:null,bracketId:null,levelId:null,liveScore:{s1:0,s2:0}});
+          }
+          S.courtsSetup=true;
+          render();
+        }catch(e){ console.warn('fbSubscribeTournament parse:',e.message); }
+      }
+    }, e=>{ console.warn('fbSubscribeTournament err:',e.message); });
+  _unsubscribes.push(unsub);
+}
+
+// Subscribe to crossover live doc
+function fbSubscribeCrossover(tid){
+  if(!DB)return;
+  const unsub = DB.collection('tournaments').doc(tid)
+    .collection('live').doc('crossover')
+    .onSnapshot(snap=>{
+      if(!snap.exists||!S.tournament)return;
+      const d=snap.data();
+      if(S.role==='public'||S.role==='scorer'){
+        try{S.tournament.crossover=JSON.parse(d.crossover||'null');render();}
+        catch(e){}
+      }
+    });
+  _unsubscribes.push(unsub);
+}
+
+function stopSubscriptions(){
+  _unsubscribes.forEach(u=>{try{u();}catch(e){}});
+  _unsubscribes=[];
+}
+
+// Load active tournament for non-admin roles on login
+async function fbLoadActiveTournament(){
+  if(!DB)return false;
+  try {
+    const snap=await DB.collection('tournaments')
+      .where('ended','==',false)
+      .orderBy('updatedAt','desc')
+      .limit(1).get();
+    if(snap.empty)return false;
+    const d=snap.docs[0].data();
+    S.tournament={
+      id:d.id,name:d.name,category:d.category,created:d.created,
+      levels:JSON.parse(d.levels||'[]'),
+      crossover:d.crossover?JSON.parse(d.crossover):null,
+      ended:d.ended||false
+    };
+    S.numCourts=d.numCourts||1;
+    S.courts=[];
+    for(let i=0;i<S.numCourts;i++)
+      S.courts.push({id:'court-'+(i+1),name:'Court '+(i+1),matchId:null,bracketId:null,levelId:null,liveScore:{s1:0,s2:0}});
+    S.courtsSetup=true;
+    fbSubscribeTournament(d.id);
+    fbSubscribeCourts(d.id);
+    fbSubscribeCrossover(d.id);
+    return true;
+  } catch(e){ console.warn('fbLoadActiveTournament:',e.message); return false; }
+}
+
+// Load all past tournaments for history view (super admin)
+async function fbLoadHistory(){
+  if(!DB){S.historyLoaded=true;return;}
+  try {
+    const snap=await DB.collection('tournaments')
+      .orderBy('updatedAt','desc').limit(30).get();
+    S.history=snap.docs.map(d=>({
+      id:d.id, name:d.data().name, category:d.data().category,
+      ended:d.data().ended,
+      createdAt:d.data().created, endedAt:d.data().endedAt||'',
+      totalPlayers: (() => {
+        try{const lvls=JSON.parse(d.data().levels||'[]');return lvls.reduce((a,l)=>a+l.players.length+(l.highPlayers||[]).length+(l.midPlayers||[]).length,0);}catch{return 0;}
+      })(),
+    }));
+    S.historyLoaded=true;
+  } catch(e){ console.warn('fbLoadHistory:',e.message); S.historyLoaded=true; }
+}
 function toast(msg,type='inf'){const tc=document.getElementById('toasts');const t=document.createElement('div');t.className=`toast ${type}`;const icons={ok:'✓',er:'✕',inf:'ℹ',sy:'⟳'};t.innerHTML=`<span>${icons[type]||'ℹ'}</span><span>${msg}</span>`;tc.appendChild(t);setTimeout(()=>t.remove(),3500);}
 function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
 function gid(){return Math.random().toString(36).slice(2,9)}
@@ -409,13 +636,13 @@ function getCourtMatch(court){if(!court.matchId)return null;return getBrMatch(co
 function assignToCourt(courtId,matchId,bracketId,levelId){
   const court=S.courts.find(c=>c.id===courtId);
   if(!court)return;
-  // Free previous match on this court
   if(court.matchId){toast('Court already has a match — end it first','er');return;}
   court.matchId=matchId;court.bracketId=bracketId;court.levelId=levelId;
   court.liveScore={s1:0,s2:0};
   S.matchQueue=S.matchQueue.filter(q=>q.matchId!==matchId);
   toast(`Match assigned to ${court.name}`,'ok');
   render();
+  fbPushCourts(); // sync to Firebase
 }
 
 function endCourtMatch(courtId){
@@ -438,16 +665,17 @@ function updateLiveScore(courtId,side,delta){
   if(side===1)c.liveScore.s1=Math.max(0,c.liveScore.s1+delta);
   else c.liveScore.s2=Math.max(0,c.liveScore.s2+delta);
   render();
+  fbPushCourts(); // sync live score to all devices
 }
 
 function swapCourtSides(courtId){
   const c=S.courts.find(x=>x.id===courtId);if(!c||!c.matchId)return;
-  // Swap scores
   [c.liveScore.s1,c.liveScore.s2]=[c.liveScore.s2,c.liveScore.s1];
-  // Swap the team assignment on the match itself so names follow
   const m=getBrMatch(c.bracketId,c.matchId);
   if(m)[m.team1,m.team2]=[m.team2,m.team1];
   toast('Sides swapped — players and scores exchanged','ok');render();
+  fbPushCourts();
+  fbPushTournament(); // team order changed
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -458,6 +686,7 @@ function initCrossover(){
   const rank1=[];t.levels.forEach(l=>l.brackets.forEach(b=>{if(b.standings[0])rank1.push({pair:b.standings[0].pair,from:b.label,levelId:l.id,bracketId:b.id});}));
   if(rank1.length<2){toast('Need at least 2 brackets','er');return;}
   t.crossover={stages:buildStages(shuffle(rank1))};render();toast('Crossover bracket created!','ok');
+  fbPushTournament();fbPushCrossover();
 }
 function buildStages(teams){const n=teams.length;if(n===2)return[{name:'Final',matches:[{id:gid(),t1:teams[0],t2:teams[1],score1:null,score2:null,status:'pending',winner:null}]}];if(n===3){const bi=Math.floor(Math.random()*3);const bye=teams[bi];const oth=teams.filter((_,i)=>i!==bi);return[{name:'Semi-Final',matches:[{id:gid(),t1:oth[0],t2:oth[1],score1:null,score2:null,status:'pending',winner:null},{id:gid(),t1:bye,t2:null,score1:null,score2:null,status:'bye',winner:bye,isBye:true}]},{name:'Final',matches:[{id:gid(),t1:null,t2:null,score1:null,score2:null,status:'pending',winner:null}]}];}if(n===4)return[{name:'Semi-Final',matches:[{id:gid(),t1:teams[0],t2:teams[3],score1:null,score2:null,status:'pending',winner:null},{id:gid(),t1:teams[1],t2:teams[2],score1:null,score2:null,status:'pending',winner:null}]},{name:'Final',matches:[{id:gid(),t1:null,t2:null,score1:null,score2:null,status:'pending',winner:null}]}];const half=Math.ceil(n/2);const semis=[];for(let i=0;i<half;i++){const opp=teams[n-1-i]||null;semis.push({id:gid(),t1:teams[i],t2:opp,score1:null,score2:null,status:opp?'pending':'bye',winner:opp?null:teams[i],isBye:!opp});}const stages=[{name:'Quarter-Final',matches:semis}];const sfCount=Math.ceil(half/2);const sfM=[];for(let i=0;i<sfCount;i++)sfM.push({id:gid(),t1:null,t2:null,score1:null,score2:null,status:'pending',winner:null});stages.push({name:'Semi-Final',matches:sfM});stages.push({name:'Final',matches:[{id:gid(),t1:null,t2:null,score1:null,score2:null,status:'pending',winner:null}]});return stages;}
 function advanceCrossover(si,mi,winner){const stages=S.tournament.crossover.stages;const m=stages[si].matches[mi];m.winner=winner;m.status='finished';const ns=stages[si+1];if(ns){const nm=ns.matches.find(x=>!x.t1||!x.t2);if(nm){if(!nm.t1)nm.t1=winner;else if(!nm.t2)nm.t2=winner;}}}
@@ -481,6 +710,7 @@ function render(){
       <div class="nav-user">${S.user.name}</div>
       <button class="logout-btn" onclick="logout()">Logout</button>
     </nav>
+    ${renderFbBar()}
     ${role==='superadmin'&&tab==='super-admin'?renderSheetsBar():''}
     <div class="main">
       ${tab==='home'?renderHome():''}
@@ -497,8 +727,25 @@ function render(){
     ${S.endModal?renderEndModal():''}
   `;
 }
-function ST(t){S.adminTab=t;if(t==='super-admin'&&!S.historyLoaded)loadHistory().then(render);else render();}
-function logout(){S.user=null;S.role=null;S.adminTab='home';render();}
+
+function renderFbBar(){
+  const cls={off:'off',connecting:'sync',on:'on',err:'err'};
+  const lbl={
+    off:'Firebase not configured — data stays on this device only',
+    connecting:'Firebase connecting…',
+    on:'Firebase live — all devices synced in real-time',
+    err:'Firebase error: '+FB_MSG
+  };
+  const col={off:'var(--text3)',connecting:'var(--accent)',on:'var(--accent2)',err:'var(--danger)'};
+  return `<div class="fb-bar" id="fb-bar">
+    <div class="fb-dot ${cls[FB_STATUS]||'off'}"></div>
+    <span class="fb-label" style="color:${col[FB_STATUS]||'var(--text3)'}">${lbl[FB_STATUS]||''}</span>
+    ${FB_STATUS==='off'?`<span style="color:var(--text3);font-size:10px">— Configure Firebase in Super Admin → Integrations to enable cross-device sync</span>`:''}
+    ${FB_STATUS==='err'?`<button class="sbar-btn" onclick="fbInit()">Reconnect</button>`:''}
+  </div>`;
+}
+function ST(t){S.adminTab=t;if(t==='super-admin'&&!S.historyLoaded)fbLoadHistory().then(render);else render();}
+function logout(){stopSubscriptions();S.user=null;S.role=null;S.adminTab='home';render();}
 
 // ═══════════════════════════════════════════════════════════
 //  SHEETS BAR (super admin only)
@@ -553,11 +800,34 @@ function renderLogin(){
 function togglePwVis(inputId,iconId){const i=document.getElementById(inputId);const ic=document.getElementById(iconId);if(!i)return;if(i.type==='password'){i.type='text';if(ic)ic.textContent='🙈';}else{i.type='password';if(ic)ic.textContent='👁';}}
 function doLogin(){
   const role=S._loginRole;if(!role){toast('Select a role','er');return;}
-  if(role==='public'){S.user={name:'Public Viewer'};S.role='public';S.adminTab='public-view';render();return;}
+  if(role==='public'){
+    S.user={name:'Public Viewer'};S.role='public';S.adminTab='public-view';
+    render();
+    // Load live tournament from Firebase
+    if(DB){
+      fbLoadActiveTournament().then(found=>{
+        if(!found){toast('No active tournament found','inf');}
+        render();
+      });
+    }
+    return;
+  }
   const u=document.getElementById('li-u')?.value;const p=document.getElementById('li-p')?.value;
   const found=S.users.find(x=>x.username===u&&x.password===p&&x.role===role);
   if(!found){S._loginErr='Invalid credentials';render();return;}
-  S.user=found;S.role=role;S.adminTab=role==='superadmin'?'home':role==='scorer'?'scorer':'home';render();
+  S.user=found;S.role=role;S.adminTab=role==='superadmin'?'home':role==='scorer'?'scorer':'home';
+  render();
+  // Scorer: load live tournament + subscribe to live courts
+  if(role==='scorer'&&DB){
+    fbLoadActiveTournament().then(found=>{
+      if(found) render();
+      else toast('No active tournament in Firebase','inf');
+    });
+  }
+  // Admin: start Firebase subscriptions for live courts so home page stays in sync
+  if((role==='admin'||role==='superadmin')&&S.tournament&&DB){
+    fbSubscribeCourts(S.tournament.id);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -663,10 +933,20 @@ function renderEndModal(){
   </div>`;
 }
 async function doEndTournament(){
+  // Excel records
   await syncStandings();await syncCrossover();await syncEndTournament();
+  // Firebase — mark ended so it won't load as active on new devices
+  if(DB&&S.tournament){
+    try{
+      await DB.collection('tournaments').doc(S.tournament.id).update({
+        ended:true,endedAt:new Date().toISOString(),updatedAt:Date.now()
+      });
+    }catch(e){console.warn('fbEndTournament:',e.message);}
+  }
+  stopSubscriptions();
   S.endModal=false;S.tournament.ended=true;S.tournament=null;
   S.courts=[];S.numCourts=0;S.courtsSetup=false;S.matchQueue=[];
-  render();toast('Tournament ended!','ok');
+  render();toast('Tournament ended and saved!','ok');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -678,12 +958,106 @@ function renderSuperAdmin(){
     <div class="tabs">
       <div class="tab${t==='users'?' active':''}" onclick="S._saTab='users';render()">User Management</div>
       <div class="tab${t==='history'?' active':''}" onclick="S._saTab='history';render()">Tournament History</div>
-      <div class="tab${t==='sheets'?' active':''}" onclick="S._saTab='sheets';render()">Sheets Integration</div>
+      <div class="tab${t==='integrations'?' active':''}" onclick="S._saTab='integrations';render()">Integrations</div>
     </div>
     ${t==='users'?renderUserMgmt():''}
     ${t==='history'?renderHistory():''}
-    ${t==='sheets'?renderSheetsAdmin():''}
+    ${t==='integrations'?renderIntegrations():''}
   </div>`;
+}
+
+function renderIntegrations(){
+  const fbOk=FB_STATUS==='on';
+  const fbCls={off:'var(--text3)',connecting:'var(--accent)',on:'var(--accent2)',err:'var(--danger)'};
+  const fbLbl={off:'Not configured',connecting:'Connecting…',on:FB_MSG,err:'Error — '+FB_MSG};
+  return`<div>
+    <!-- ── FIREBASE ── -->
+    <div class="card" style="margin-bottom:16px;border-color:${fbOk?'rgba(61,214,140,.3)':'var(--border)'}">
+      <div class="fbetween" style="margin-bottom:14px">
+        <div>
+          <div style="font-weight:700;font-size:16px">🔥 Firebase Firestore</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">Real-time cross-device sync — courts, scores, queue</div>
+        </div>
+        <span class="badge" style="color:${fbCls[FB_STATUS]};background:${fbCls[FB_STATUS]}22;border:1px solid ${fbCls[FB_STATUS]}44">
+          ${FB_STATUS==='on'?'● Live':FB_STATUS==='connecting'?'◌ Connecting':FB_STATUS==='err'?'● Error':'○ Off'}
+        </span>
+      </div>
+
+      <div style="background:var(--surface3);border-radius:var(--rs);padding:12px;margin-bottom:14px;font-size:11px;color:var(--text2);line-height:1.7">
+        <strong style="color:var(--accent)">Setup (one-time):</strong><br>
+        1. Go to <strong>console.firebase.google.com</strong> → Create project<br>
+        2. Add a Web App → Copy the <code>firebaseConfig</code> values below<br>
+        3. In Firestore → Create database → Start in <strong>test mode</strong><br>
+        4. Add Firestore index: Collection <code>tournaments</code>, Field <code>ended</code> ASC + <code>updatedAt</code> DESC<br>
+        5. Paste values and click <strong>Save & Connect</strong>
+      </div>
+
+      <div class="g2" style="margin-bottom:12px">
+        <div><label class="label">API Key</label><input class="inp inp-sm" id="fb-apiKey" placeholder="AIzaSy…" value="${FB_CONFIG.apiKey!=='YOUR_API_KEY'?FB_CONFIG.apiKey:''}"/></div>
+        <div><label class="label">Project ID</label><input class="inp inp-sm" id="fb-projectId" placeholder="my-project-id" value="${FB_CONFIG.projectId!=='YOUR_PROJECT_ID'?FB_CONFIG.projectId:''}"/></div>
+        <div><label class="label">App ID</label><input class="inp inp-sm" id="fb-appId" placeholder="1:123…:web:abc…" value="${FB_CONFIG.appId!=='YOUR_APP_ID'?FB_CONFIG.appId:''}"/></div>
+        <div><label class="label">Messaging Sender ID</label><input class="inp inp-sm" id="fb-senderId" placeholder="123456789" value="${FB_CONFIG.messagingSenderId!=='YOUR_SENDER_ID'?FB_CONFIG.messagingSenderId:''}"/></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-y" onclick="saveFbConfig()">Save & Connect</button>
+        ${fbOk?`<button class="btn btn-out btn-sm" onclick="fbPushTournament().then(()=>toast('Tournament pushed to Firebase','ok'))">Push Current Tournament</button>`:''}
+        ${FB_STATUS==='err'?`<button class="btn btn-out btn-sm" onclick="fbInit()">Retry Connection</button>`:''}
+      </div>
+      ${fbOk?`<div style="margin-top:10px;font-size:11px;color:var(--accent2)">✓ Connected — scorers and public viewers will sync automatically</div>`:''}
+    </div>
+
+    <!-- ── SHEETS ── -->
+    <div class="card">
+      <div class="fbetween" style="margin-bottom:12px">
+        <div>
+          <div style="font-weight:700;font-size:16px">📊 Google Sheets (Apps Script)</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">Excel recording — match scores, standings, tournament history</div>
+        </div>
+        <span class="badge ${S.sheetsStatus==='ok'?'bg-g':S.sheetsStatus==='err'?'bg-r':'bg-n'}">
+          ${S.sheetsStatus==='ok'?'● Active':S.sheetsStatus==='err'?'● Error':'○ Untested'}
+        </span>
+      </div>
+      <div style="background:var(--surface3);border-radius:var(--rs);padding:9px 13px;margin-bottom:12px;font-family:monospace;font-size:10px;color:var(--accent3);word-break:break-all">${S.sheetsUrl}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-b" onclick="testSheets()">Test Connection</button>
+        <button class="btn btn-out" onclick="manualSync()">Manual Full Sync</button>
+        <button class="btn btn-out" onclick="fbLoadHistory().then(render)">Reload History</button>
+      </div>
+
+      <hr class="sep"/>
+      <div style="font-weight:600;font-size:13px;margin-bottom:10px">What gets saved to Excel</div>
+      <div class="g2">
+        ${[
+          {i:'⚙️',t:'Setup',d:'On bracket generation — all players and pairs'},
+          {i:'🏸',t:'Match Scores',d:'After every match — one row per match'},
+          {i:'📊',t:'Standings',d:'On tournament end — final rankings'},
+          {i:'🏆',t:'Crossover',d:'After each crossover match result'}
+        ].map(x=>`<div class="panel" style="margin-bottom:0">
+          <div style="font-size:18px;margin-bottom:4px">${x.i}</div>
+          <div style="font-weight:700;font-size:12px">${x.t}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">${x.d}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function saveFbConfig(){
+  const apiKey=document.getElementById('fb-apiKey')?.value.trim();
+  const projectId=document.getElementById('fb-projectId')?.value.trim();
+  const appId=document.getElementById('fb-appId')?.value.trim();
+  const senderId=document.getElementById('fb-senderId')?.value.trim();
+  if(!apiKey||!projectId){toast('API Key and Project ID are required','er');return;}
+  FB_CONFIG.apiKey=apiKey;
+  FB_CONFIG.projectId=projectId;
+  FB_CONFIG.authDomain=projectId+'.firebaseapp.com';
+  FB_CONFIG.storageBucket=projectId+'.appspot.com';
+  FB_CONFIG.appId=appId||FB_CONFIG.appId;
+  FB_CONFIG.messagingSenderId=senderId||FB_CONFIG.messagingSenderId;
+  // Re-init Firebase with new config (delete existing app first)
+  try{firebase.app().delete().then(()=>{DB=null;fbInit();render();});}
+  catch(e){DB=null;fbInit();render();}
+  toast('Firebase config saved — connecting…','inf');
 }
 function renderUserMgmt(){
   return`<div>
@@ -726,7 +1100,7 @@ function renderHistory(){
   return`<div>
     <div class="fbetween" style="margin-bottom:14px">
       <div class="title" style="font-size:20px">Tournament History</div>
-      <button class="btn btn-out btn-sm" onclick="loadHistory().then(render)">↻ Refresh</button>
+      <button class="btn btn-out btn-sm" onclick="fbLoadHistory().then(render)">↻ Refresh</button>
     </div>
     ${!h.length?`<div class="empty"><div class="empty-i">📜</div><div class="empty-t">No history yet</div><div class="empty-s">Ended tournaments appear here</div></div>`:
     `<div class="card"><table class="htbl">
@@ -742,39 +1116,6 @@ function renderHistory(){
         <td style="font-size:11px;color:var(--text3)">${r.endedAt?new Date(r.endedAt).toLocaleDateString():''}</td>
       </tr>`).join('')}</tbody>
     </table></div>`}
-  </div>`;
-}
-function renderSheetsAdmin(){
-  const st=S.sheetsStatus;const sc={off:'var(--text3)',ok:'var(--accent2)',err:'var(--danger)',syncing:'var(--accent)'};
-  return`<div>
-    <div class="title" style="font-size:20px;margin-bottom:4px">Sheets Integration</div>
-    <div class="sub" style="margin-bottom:18px">Apps Script URL is embedded. Only Super Admin can test and manage sync.</div>
-    <div class="card" style="margin-bottom:14px">
-      <div class="fbetween" style="margin-bottom:12px">
-        <div style="font-weight:700">Connection Status</div>
-        <span class="badge" style="color:${sc[st]};background:${sc[st]}22;border:1px solid ${sc[st]}44">${st==='ok'?'● Connected':st==='err'?'● Error':st==='syncing'?'◌ Syncing':'○ Untested'}</span>
-      </div>
-      <div style="background:var(--surface3);border-radius:var(--rs);padding:9px 13px;margin-bottom:12px;font-family:monospace;font-size:10px;color:var(--accent3);word-break:break-all">${S.sheetsUrl}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-b" onclick="testSheets()">Test Connection</button>
-        <button class="btn btn-out" onclick="manualSync()">Manual Full Sync</button>
-        <button class="btn btn-out" onclick="loadHistory().then(render)">Reload History</button>
-      </div>
-    </div>
-    <div class="card">
-      <div style="font-weight:700;margin-bottom:12px">Sync Events</div>
-      <div class="g2">
-        ${[{i:'⚙️',t:'Setup',d:'On bracket generation — saves all players and pairs'},
-           {i:'🏸',t:'Match Scores',d:'After each match ends — appends one row per match'},
-           {i:'📊',t:'Standings',d:'On tournament end — saves final rankings'},
-           {i:'🏆',t:'Crossover',d:'After each crossover match and on tournament end'}].map(x=>`
-          <div class="panel" style="margin-bottom:0">
-            <div style="font-size:18px;margin-bottom:5px">${x.i}</div>
-            <div style="font-weight:700;font-size:13px">${x.t}</div>
-            <div style="font-size:11px;color:var(--text2);margin-top:2px">${x.d}</div>
-          </div>`).join('')}
-      </div>
-    </div>
   </div>`;
 }
 function openAddUser(){S.userModal={id:null,username:'',password:'',name:'',role:'admin'};render();}
@@ -863,6 +1204,7 @@ function submitCreate(){
   S.tournament={id:gid(),name,category:S._tCat,levels:[],crossover:null,created:new Date().toISOString()};
   initCourts(nc);
   render();toast('Tournament created!','ok');
+  fbPushTournament(); // push to Firebase so other devices see it
 }
 // ── DRAFT INPUT BUFFERS ──────────────────────────────────
 // Stores unsaved textarea text per level so re-renders don't wipe inputs.
@@ -1189,6 +1531,7 @@ function genBracketsBtn(lvlId){
   render();
   toast('Brackets generated!','ok');
   if(S.sheetsUrl.trim()) setTimeout(syncSetup,400);
+  setTimeout(fbPushTournament,500); // push updated levels/brackets to Firebase
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1258,8 +1601,9 @@ function renderCourtCard(court){
 
     <!-- Court actions -->
     <div class="court-actions">
-      ${m?`<button class="btn btn-r btn-xs" onclick="endCourtMatch('${court.id}')">End Match</button>
-           <button class="btn btn-o btn-xs" onclick="swapCourtSides('${court.id}')">↔ Change Court</button>`
+      ${m?`<button class="btn btn-r btn-xs" onclick="endCourtMatch('${court.id}')">🏁 End</button>
+           <button class="btn btn-o btn-xs" onclick="swapCourtSides('${court.id}')">↔</button>
+           <button class="btn btn-out btn-xs" style="background:rgba(26,31,46,.7);color:var(--text2);border-color:var(--border2)" onclick="returnMatchToQueue('${court.id}')" title="Return match to queue">↩ Queue</button>`
          :`<button class="btn btn-y btn-xs" onclick="assignNextFromQueue('${court.id}')">← Queue</button>`}
     </div>
 
@@ -1287,7 +1631,18 @@ function renderCourtCard(court){
   </div>`;
 }
 
-function startEditCourtName(cid){S.editingCourtId=cid;render();setTimeout(()=>{const inp=document.getElementById(`cname-inp-${cid}`);if(inp){inp.focus();inp.select();}},50);}
+function returnMatchToQueue(courtId){
+  const c=S.courts.find(x=>x.id===courtId);
+  if(!c||!c.matchId)return;
+  const hasScore=c.liveScore.s1>0||c.liveScore.s2>0;
+  if(hasScore){
+    if(!confirm(`This match already has a live score (${c.liveScore.s1}–${c.liveScore.s2}). Return to queue anyway and discard the score?`))return;
+  }
+  S.matchQueue.unshift({matchId:c.matchId,bracketId:c.bracketId,levelId:c.levelId});
+  c.matchId=null;c.bracketId=null;c.levelId=null;c.liveScore={s1:0,s2:0};
+  toast('Match returned to queue','ok');render();
+  fbPushCourts(); // sync freed court to all devices
+}
 function saveCourtName(cid){
   const inp=document.getElementById(`cname-inp-${cid}`);
   const c=S.courts.find(x=>x.id===cid);
@@ -1563,17 +1918,21 @@ async function submitScore(){
   const brId=sm.brId||sm.bracketId;const mId=sm.mId||sm.matchId;
   const m=getBrMatch(brId,mId);const{lvl,br}=getLvlAndBr(brId);if(!m)return;
   m.score1=sm.s1;m.score2=sm.s2;m.status='finished';refreshStandings();
-  // Free the court
   if(sm.courtId){const c=S.courts.find(x=>x.id===sm.courtId);if(c){c.matchId=null;c.bracketId=null;c.levelId=null;c.liveScore={s1:0,s2:0};}}
-  // Auto-assign next from queue to freed court
   const freed=S.courts.find(c=>!c.matchId&&sm.courtId===c.id);
   if(freed&&S.matchQueue.length){const next=S.matchQueue[0];S.matchQueue.shift();assignToCourtDirect(freed.id,next.matchId,next.bracketId,next.levelId);}
   S.scoreModal=null;render();toast('Score saved!','ok');
-  if(S.sheetsUrl.trim())syncMatchScore(m,lvl?.name,br?.label,false);
+  // Excel record
+  if(S.sheetsUrl.trim()) syncMatchScore(m,lvl?.name,br?.label,false);
+  // Firebase sync
+  fbPushMatchScore(mId,brId,sm.s1,sm.s2,'finished');
+  fbPushCourts();
+  fbPushTournament();
 }
 function assignToCourtDirect(cid,mId,brId,lvlId){
   const c=S.courts.find(x=>x.id===cid);if(!c)return;
   c.matchId=mId;c.bracketId=brId;c.levelId=lvlId;c.liveScore={s1:0,s2:0};
+  fbPushCourts();
 }
 function openScore(mId,brId,lvlId){S.scoreModal={mId,brId,lvlId,s1:0,s2:0};render();}
 
@@ -1673,7 +2032,10 @@ async function submitCrossScore(){
   const st=t.crossover.stages[cs.si];const m=st.matches[cs.mi];
   m.score1=cs.s1;m.score2=cs.s2;const winner=cs.s1>cs.s2?m.t1:m.t2;
   advanceCrossover(cs.si,cs.mi,winner);S.crossScoreModal=null;render();toast('Winner advanced!','ok');
+  // Excel record
   if(S.sheetsUrl.trim()){syncMatchScore({team1:m.t1?.pair,team2:m.t2?.pair,score1:cs.s1,score2:cs.s2,winner:winner?.pair},'',st.name,true);syncCrossover();}
+  // Firebase sync
+  fbPushCrossover();fbPushTournament();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1806,6 +2168,7 @@ function renderScorerBoard(court){
           &nbsp;·&nbsp; Tap side or use +/− buttons
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-out btn-sm" onclick="returnMatchToQueue('${court.id}')">↩ Return to Queue</button>
           <button class="btn btn-o btn-sm" onclick="swapCourtSides('${court.id}')">↔ Change Court</button>
           <button class="btn btn-r btn-sm" onclick="endCourtMatch('${court.id}')">🏁 End Match</button>
         </div>
@@ -1889,6 +2252,7 @@ function renderPubCrossover(){
 //  INIT
 // ═══════════════════════════════════════════════════════════
 S._loginRole='admin';S._numCourts=2;
+fbInit(); // attempt Firebase connection on load
 render();
 </script>
 </body>
